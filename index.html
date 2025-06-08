@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>句子圖片展示</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    #sheetSelector button {
+      margin-right: 10px;
+      padding: 5px 10px;
+    }
+    #sentence {
+      font-size: 24px;
+      margin: 20px 0;
+    }
+    .char-image {
+      width: 100px;
+      height: 100px;
+      margin: 5px;
+    }
+    #images {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .fullscreen {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .fullscreen img {
+      max-width: 90%;
+      max-height: 90%;
+    }
+  </style>
+</head>
+<body>
+  <h2>選擇工作表</h2>
+  <div id="sheetSelector"></div>
+  <button onclick="nextSentence()">下一句</button>
+  <div id="sentence"></div>
+  <div id="images"></div>
+
+  <div id="fullscreen" class="fullscreen" style="display:none" onclick="onFullScreenClick()">
+    <img id="fullscreenImg" src="" />
+  </div>
+
+  <script>
+    let data = {};
+    let currentCol = null;
+    let currentRow = 0;
+    let fullChar = null;
+    let fullImageIndex = 1;
+
+    const spreadsheetId = '13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0';
+    const sheetNames = ['一上', '一下', '二上', '二下', '生活華語一', '生活華語二', '生活華語三'];
+
+    function createSheetButtons() {
+      const selector = document.getElementById('sheetSelector');
+      sheetNames.forEach(name => {
+        const btn = document.createElement('button');
+        btn.textContent = name;
+        btn.onclick = () => loadSheetData(name);
+        selector.appendChild(btn);
+      });
+    }
+
+    async function loadSheetData(sheetName) {
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&tqx=out:json`;
+      try {
+        const response = await fetch(url);
+        const text = await response.text();
+        const json = JSON.parse(text.substring(47, text.length - 2));
+
+        const table = json.table;
+        const cols = table.cols.map(col => col.label);
+        data = {};
+        for (let i = 0; i < cols.length; i++) {
+          data[cols[i]] = [];
+        }
+        for (let row of table.rows) {
+          row.c.forEach((cell, i) => {
+            const value = cell ? cell.v : '';
+            data[cols[i]].push(value);
+          });
+        }
+
+        currentCol = Object.keys(data)[0];
+        currentRow = 0;
+        showSentence();
+      } catch (error) {
+        console.error('讀取 Google 試算表失敗：', error);
+      }
+    }
+
+    function nextSentence() {
+      if (!currentCol) return;
+      currentRow++;
+      showSentence();
+    }
+
+    function showSentence() {
+      const sentence = data[currentCol][currentRow];
+      if (!sentence) return;
+      document.getElementById('sentence').textContent = sentence;
+      const container = document.getElementById('images');
+      container.innerHTML = '';
+      for (let char of sentence) {
+        const img = document.createElement('img');
+        img.className = 'char-image';
+        img.dataset.char = char;
+        img.dataset.index = 1;
+        img.src = `images/${char}1.jpg`;
+        img.onerror = function () {
+          this.src = `images/${char}2.jpg`;
+        };
+        img.onclick = () => openFullScreen(char, 1);
+        container.appendChild(img);
+      }
+    }
+
+    function openFullScreen(char, index) {
+      fullChar = char;
+      fullImageIndex = index;
+      const fs = document.getElementById('fullscreen');
+      const img = document.getElementById('fullscreenImg');
+      img.src = `images/${char}${index}.jpg`;
+      img.onerror = function () {
+        img.src = `images/${char}2.jpg`;
+        fullImageIndex = 2;
+      };
+      fs.style.display = 'flex';
+    }
+
+    function onFullScreenClick() {
+      if (fullImageIndex === 1) {
+        fullImageIndex = 2;
+        document.getElementById('fullscreenImg').src = `images/${fullChar}2.jpg`;
+      } else {
+        document.getElementById('fullscreen').style.display = 'none';
+      }
+    }
+
+    window.onload = createSheetButtons;
+  </script>
+</body>
+</html>
