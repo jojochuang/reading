@@ -103,6 +103,10 @@
     function nextSentence() {
       if (!currentCol) return;
       currentRow++;
+      if (!data[currentCol] || !data[currentCol][currentRow]) {
+        alert('已經是最後一句了');
+        return;
+      }
       showSentence();
     }
 
@@ -113,13 +117,16 @@
       const container = document.getElementById('images');
       container.innerHTML = '';
       for (let char of sentence) {
+        char = char.trim();
         const img = document.createElement('img');
         img.className = 'char-image';
         img.dataset.char = char;
         img.dataset.index = 1;
-        img.src = `images/${char}1.jpg`;
+        img.loading = 'lazy';
+        img.src = `images/${char}1.jpeg`;
         img.onerror = function () {
-          this.src = `images/${char}2.jpg`;
+          this.onerror = null;
+          this.src = `images/${char}2.gif`;
         };
         img.onclick = () => openFullScreen(char, 1);
         container.appendChild(img);
@@ -131,9 +138,9 @@
       fullImageIndex = index;
       const fs = document.getElementById('fullscreen');
       const img = document.getElementById('fullscreenImg');
-      img.src = `images/${char}${index}.jpg`;
+      img.src = `images/${char}${index === 1 ? '1.jpeg' : '2.gif'}`;
       img.onerror = function () {
-        img.src = `images/${char}2.jpg`;
+        img.src = `images/${char}2.gif`;
         fullImageIndex = 2;
       };
       fs.style.display = 'flex';
@@ -142,7 +149,7 @@
     function onFullScreenClick() {
       if (fullImageIndex === 1) {
         fullImageIndex = 2;
-        document.getElementById('fullscreenImg').src = `images/${fullChar}2.jpg`;
+        document.getElementById('fullscreenImg').src = `images/${fullChar}2.gif`;
       } else {
         document.getElementById('fullscreen').style.display = 'none';
       }
