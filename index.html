@@ -64,135 +64,28 @@
     }
   </style>
   <script src="strokeMap.js"></script>
+  <script>
+    if (typeof strokeMap === 'undefined') {
+      var strokeMap = {};
+    }
+  </script>
 </head>
-<body>
+<body ontouchstart="">
   <select id="sheet-select" onchange="loadSheet()">
-  <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
-  <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
-  <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
-  <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
-</select>
+    <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
+    <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
+    <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
+    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
+  </select>
   <select id="lesson-select" onchange="changeLesson()"></select>
-
   <div class="sentence" id="sentence"></div>
-
   <div class="controls">
     <button onclick="prevSentence()">⬅️ 上一句</button>
     <button onclick="playAudio()">🔊 播放語音</button>
     <button onclick="nextSentence()">➡️ 下一句</button>
   </div>
-
   <div id="fullscreen-view" onclick="cycleFullscreen()">
     <img id="fullscreen-img" src="" alt="" />
   </div>
-
-  <script>
-    let allLessons = {};
-    let lessonTitles = [];
-    let sentences = [];
-    let current = 0;
-    let fullscreenStep = 0;
-    let currentChar = '';
-
-    const sheetSelect = document.getElementById("sheet-select");
-    const lessonSelect = document.getElementById("lesson-select");
-    const sentenceContainer = document.getElementById("sentence");
-    const fullscreenView = document.getElementById("fullscreen-view");
-    const fullscreenImg = document.getElementById("fullscreen-img");
-
-    function loadSheet() {
-      const url = sheetSelect.value;
-      fetch(url)
-        .then(response => response.text())
-        .then(csv => {
-          const lines = csv.split('\n').map(line => line.trim());
-          allLessons = {};
-          const headers = lines[0].split(',');
-          for (let col = 0; col < headers.length; col++) {
-            const title = headers[col];
-            const content = [];
-            for (let row = 1; row < lines.length; row++) {
-              const cells = lines[row].split(',');
-              if (cells[col]) content.push(cells[col]);
-            }
-            if (title) allLessons[title] = content;
-          }
-          populateLessons();
-        });
-    }
-
-    function populateLessons() {
-      lessonSelect.innerHTML = '';
-      lessonTitles = Object.keys(allLessons);
-      lessonTitles.forEach((title, index) => {
-        const option = document.createElement("option");
-        option.value = index;
-        option.textContent = title;
-        lessonSelect.appendChild(option);
-      });
-      changeLesson();
-    }
-
-    function changeLesson() {
-      const index = lessonSelect.value;
-      const title = lessonTitles[index];
-      sentences = allLessons[title];
-      current = 0;
-      renderSentence();
-    }
-
-    function renderSentence() {
-      const sentence = sentences[current];
-      sentenceContainer.innerHTML = '';
-      for (const char of sentence) {
-        const span = document.createElement("span");
-        span.textContent = char;
-        span.className = "char";
-        span.onclick = () => showFullscreen(char);
-        sentenceContainer.appendChild(span);
-      }
-    }
-
-    function showFullscreen(char) {
-      currentChar = char;
-      fullscreenStep = 0;
-      fullscreenImg.src = `${char}1.JPEG`;
-      fullscreenView.style.display = "flex";
-    }
-
-    function cycleFullscreen() {
-      fullscreenStep++;
-      if (fullscreenStep === 1) {
-        const strokeId = strokeMap[currentChar];
-        if (strokeId) {
-          fullscreenImg.src = `https://www.twpen.com/bishun-animation/${strokeId}-stroke-order.gif`;
-        } else {
-          fullscreenImg.src = '';
-          fullscreenImg.alt = '找不到筆順動畫';
-        }
-      } else {
-        fullscreenView.style.display = "none";
-      }
-    }
-
-    function playAudio() {
-      const msg = new SpeechSynthesisUtterance(sentences[current]);
-      msg.lang = 'zh-TW';
-      speechSynthesis.speak(msg);
-    }
-
-    function nextSentence() {
-      current = (current + 1) % sentences.length;
-      renderSentence();
-    }
-
-    function prevSentence() {
-      current = (current - 1 + sentences.length) % sentences.length;
-      renderSentence();
-    }
-
-    // 預設載入第一份試算表
-    loadSheet();
-  </script>
 </body>
 </html>
