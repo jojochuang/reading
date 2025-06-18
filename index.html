@@ -78,14 +78,163 @@
     <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
   </select>
   <select id="lesson-select" onchange="changeLesson()"></select>
+
   <div class="sentence" id="sentence"></div>
+
   <div class="controls">
     <button onclick="prevSentence()">⬅️ 上一句</button>
     <button onclick="playAudio()">🔊 播放語音</button>
     <button onclick="nextSentence()">➡️ 下一句</button>
   </div>
+
   <div id="fullscreen-view" onclick="cycleFullscreen()">
     <img id="fullscreen-img" src="" alt="" />
   </div>
+
+  <script>
+    let allLessons = {};
+    let lessonTitles = [];
+    let sentences = [];
+    let current = 0;
+    let fullscreenStep = 0;
+    let currentChar = '';
+
+    const sheetSelect = document.getElementById("sheet-select");
+    const lessonSelect = document.getElementById("lesson-select");
+    const sentenceContainer = document.getElementById("sentence");
+    const fullscreenView = document.getElementById("fullscreen-view");
+    const fullscreenImg = document.getElementById("fullscreen-img");
+
+    function loadSheet() {
+      const url = sheetSelect.value;
+      sentenceContainer.innerHTML = '<p>📖 載入課本中...</p>';
+      fetch(url)
+        .then(response => response.text())
+        .then(csv => {
+          const lines = csv.split(/?
+/).map(line => line.trim()).filter(line => line.length);
+          allLessons = {};
+          const headers = lines[0].split(',');
+          for (let col = 0; col < headers.length; col++) {
+            const title = headers[col];
+            const content = [];
+            for (let row = 1; row < lines.length; row++) {
+              const cells = lines[row].split(',');
+              if (cells[col]) content.push(cells[col]);
+            }
+            if (title && content.length > 0) allLessons[title] = content;
+          }
+          populateLessons();
+        })
+        .catch(error => {
+          sentenceContainer.innerHTML = '<p style="color:red">🚫 載入失敗，請重新選擇課本</p>';
+          console.error('錯誤：無法載入試算表', error);
+        });
+    }
+
+    function populateLessons() {
+      lessonSelect.innerHTML = '';
+      lessonTitles = Object.keys(allLessons);
+      lessonTitles.forEach((title, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = title;
+        lessonSelect.appendChild(option);
+      });
+      if (lessonTitles.length > 0) changeLesson();
+    }
+
+    function changeLesson() {
+      const index = lessonSelect.value;
+      const title = lessonTitles[index];
+      sentences = allLessons[title] || [];
+      current = 0;
+      renderSentence();
+    }
+
+    function renderSentence() {
+      sentenceContainer.innerHTML = '';
+      if (!sentences[current]) {
+        sentenceContainer.innerHTML = '<p>（這一課目前沒有內容）</p>';
+        return;
+      }
+      for (const char of sentences[current]) {
+        const span = document.createElement("span");
+        span.textContent = char;
+        span.className = "char";
+        span.onclick = () => showFullscreen(char);
+        sentenceContainer.appendChild(span);
+      }
+    }
+
+    function showFullscreen(char) {
+      currentChar = char;
+      fullscreenStep = 0;
+      fullscreenImg.src = `${char}1.JPEG`;
+      fullscreenImg.alt = `${char}`;
+      fullscreenView.style.display = "flex";
+    }
+
+    function cycleFullscreen() {
+      fullscreenStep++;
+      if (fullscreenStep === 1) {
+        const strokeValue = strokeMap[currentChar];
+        if (strokeValue) {
+          let gifUrl = '';
+          if (/^https?:\/\//.test(strokeValue)) {
+            gifUrl = strokeValue;
+          } else {
+            gifUrl = `https://www.twpen.com/bishun-animation/${strokeValue}-stroke-order.gif`;
+          }
+          fullscreenImg.src = gifUrl;
+        } else {
+          fullscreenImg.src = '';
+          fullscreenImg.alt = '找不到筆順動畫';
+        }
+      } else {
+        fullscreenView.style.display = "none";
+      }
+    }
+
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'zh-TW';
+        u.rate = 0.75;
+        let interval = setInterval(() => {
+          const voices = window.speechSynthesis.getVoices();
+          if (voices.length) {
+            let zhVoices = voices.filter(v => v.lang === 'zh-TW');
+            let preferred = zhVoices.find(v => v.name.includes("美佳") || v.name.includes("Meijia"));
+            if (!preferred && zhVoices.length) preferred = zhVoices[0];
+            if (preferred) u.voice = preferred;
+            clearInterval(interval);
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+          }
+        }, 200);
+      }
+    }
+
+    function playAudio() {
+      if (sentences.length && sentences[current]) speak(sentences[current]);
+    }
+
+    function nextSentence() {
+      if (sentences.length > 0) {
+        current = (current + 1) % sentences.length;
+        renderSentence();
+      }
+    }
+
+    function prevSentence() {
+      if (sentences.length > 0) {
+        current = (current - 1 + sentences.length) % sentences.length;
+        renderSentence();
+      }
+    }
+
+    loadSheet();
+  </script>
 </body>
 </html>
