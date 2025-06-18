@@ -1,161 +1,191 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>句子圖片展示</title>
+  <title>中文教學展示</title>
   <style>
     body {
-      font-family: sans-serif;
-      padding: 20px;
+      margin: 0;
+      font-family: "Comic Sans MS", sans-serif;
+      background-color: #fff8f0;
+      text-align: center;
+      overflow-x: hidden;
     }
-    #sheetSelector button {
-      margin-right: 10px;
-      padding: 5px 10px;
+    select {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      padding: 0.5rem;
+      border-radius: 8px;
     }
-    #sentence {
-      font-size: 24px;
-      margin: 20px 0;
+    .sentence {
+      font-size: 2.5rem;
+      margin-top: 2rem;
     }
-    .char-image {
-      width: 100px;
-      height: 100px;
-      margin: 5px;
+    .char {
+      margin: 0 0.3em;
+      display: inline-block;
+      cursor: pointer;
+      padding: 0.2em 0.4em;
+      border-radius: 10px;
+      background: #ffefd5;
+      box-shadow: 2px 2px 5px #ccc;
+      transition: transform 0.2s;
     }
-    #images {
-      display: flex;
-      flex-wrap: wrap;
+    .char:active {
+      transform: scale(1.2);
     }
-    .fullscreen {
+    .controls {
+      margin-top: 2rem;
+    }
+    button {
+      font-size: 1.2rem;
+      margin: 0.5rem;
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      background-color: #ffb6c1;
+      color: white;
+      box-shadow: 2px 2px 5px #999;
+    }
+    #fullscreen-view {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      justify-content: center;
+      background: white;
+      display: none;
       align-items: center;
-      z-index: 9999;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 1000;
     }
-    .fullscreen img {
-      max-width: 90%;
-      max-height: 90%;
+    #fullscreen-img {
+      max-width: 90vw;
+      max-height: 80vh;
     }
   </style>
 </head>
 <body>
-  <h2>選擇工作表</h2>
-  <div id="sheetSelector"></div>
-  <button onclick="nextSentence()">下一句</button>
-  <div id="sentence"></div>
-  <div id="images"></div>
+  <select id="sheet-select" onchange="loadSheet()">
+  <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
+  <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
+  <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
+  <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
+</select>
+  <select id="lesson-select" onchange="changeLesson()"></select>
 
-  <div id="fullscreen" class="fullscreen" style="display:none" onclick="onFullScreenClick()">
-    <img id="fullscreenImg" src="" />
+  <div class="sentence" id="sentence"></div>
+
+  <div class="controls">
+    <button onclick="prevSentence()">⬅️ 上一句</button>
+    <button onclick="playAudio()">🔊 播放語音</button>
+    <button onclick="nextSentence()">➡️ 下一句</button>
+  </div>
+
+  <div id="fullscreen-view" onclick="cycleFullscreen()">
+    <img id="fullscreen-img" src="" alt="" />
   </div>
 
   <script>
-    let data = {};
-    let currentCol = null;
-    let currentRow = 0;
-    let fullChar = null;
-    let fullImageIndex = 1;
+    let allLessons = {};
+    let lessonTitles = [];
+    let sentences = [];
+    let current = 0;
+    let fullscreenStep = 0;
+    let currentChar = '';
 
-    const spreadsheetId = '13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0';
-    const sheetNames = ['一上', '一下', '二上', '二下', '生活華語一', '生活華語二', '生活華語三'];
+    const sheetSelect = document.getElementById("sheet-select");
+    const lessonSelect = document.getElementById("lesson-select");
+    const sentenceContainer = document.getElementById("sentence");
+    const fullscreenView = document.getElementById("fullscreen-view");
+    const fullscreenImg = document.getElementById("fullscreen-img");
 
-    function createSheetButtons() {
-      const selector = document.getElementById('sheetSelector');
-      sheetNames.forEach(name => {
-        const btn = document.createElement('button');
-        btn.textContent = name;
-        btn.onclick = () => loadSheetData(name);
-        selector.appendChild(btn);
-      });
+    function loadSheet() {
+      const url = sheetSelect.value;
+      fetch(url)
+        .then(response => response.text())
+        .then(csv => {
+          const lines = csv.split('\n').map(line => line.trim());
+          allLessons = {};
+          const headers = lines[0].split(',');
+          for (let col = 0; col < headers.length; col++) {
+            const title = headers[col];
+            const content = [];
+            for (let row = 1; row < lines.length; row++) {
+              const cells = lines[row].split(',');
+              if (cells[col]) content.push(cells[col]);
+            }
+            if (title) allLessons[title] = content;
+          }
+          populateLessons();
+        });
     }
 
-    async function loadSheetData(sheetName) {
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&tqx=out:json`;
-      try {
-        const response = await fetch(url);
-        const text = await response.text();
-        const json = JSON.parse(text.substring(47, text.length - 2));
+    function populateLessons() {
+      lessonSelect.innerHTML = '';
+      lessonTitles = Object.keys(allLessons);
+      lessonTitles.forEach((title, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = title;
+        lessonSelect.appendChild(option);
+      });
+      changeLesson();
+    }
 
-        const table = json.table;
-        const cols = table.cols.map(col => col.label);
-        data = {};
-        for (let i = 0; i < cols.length; i++) {
-          data[cols[i]] = [];
-        }
-        for (let row of table.rows) {
-          row.c.forEach((cell, i) => {
-            const value = cell ? cell.v : '';
-            data[cols[i]].push(value);
-          });
-        }
+    function changeLesson() {
+      const index = lessonSelect.value;
+      const title = lessonTitles[index];
+      sentences = allLessons[title];
+      current = 0;
+      renderSentence();
+    }
 
-        currentCol = Object.keys(data)[0];
-        currentRow = 0;
-        showSentence();
-      } catch (error) {
-        console.error('讀取 Google 試算表失敗：', error);
+    function renderSentence() {
+      const sentence = sentences[current];
+      sentenceContainer.innerHTML = '';
+      for (const char of sentence) {
+        const span = document.createElement("span");
+        span.textContent = char;
+        span.className = "char";
+        span.onclick = () => showFullscreen(char);
+        sentenceContainer.appendChild(span);
       }
+    }
+
+    function showFullscreen(char) {
+      currentChar = char;
+      fullscreenStep = 0;
+      fullscreenImg.src = `${char}1.JPEG`;
+      fullscreenView.style.display = "flex";
+    }
+
+    function cycleFullscreen() {
+      fullscreenStep++;
+      if (fullscreenStep === 1) {
+        fullscreenImg.src = `${currentChar}2.GIF`;
+      } else {
+        fullscreenView.style.display = "none";
+      }
+    }
+
+    function playAudio() {
+      const msg = new SpeechSynthesisUtterance(sentences[current]);
+      msg.lang = 'zh-TW';
+      speechSynthesis.speak(msg);
     }
 
     function nextSentence() {
-      if (!currentCol) return;
-      currentRow++;
-      if (!data[currentCol] || !data[currentCol][currentRow]) {
-        alert('已經是最後一句了');
-        return;
-      }
-      showSentence();
+      current = (current + 1) % sentences.length;
+      renderSentence();
     }
 
-    function showSentence() {
-      const sentence = data[currentCol][currentRow];
-      if (!sentence) return;
-      document.getElementById('sentence').textContent = sentence;
-      const container = document.getElementById('images');
-      container.innerHTML = '';
-      for (let char of sentence) {
-        char = char.trim();
-        const img = document.createElement('img');
-        img.className = 'char-image';
-        img.dataset.char = char;
-        img.dataset.index = 1;
-        img.loading = 'lazy';
-        img.src = `images/${char}1.jpeg`;
-        img.onerror = function () {
-          this.onerror = null;
-          this.src = `images/${char}2.gif`;
-        };
-        img.onclick = () => openFullScreen(char, 1);
-        container.appendChild(img);
-      }
+    function prevSentence() {
+      current = (current - 1 + sentences.length) % sentences.length;
+      renderSentence();
     }
 
-    function openFullScreen(char, index) {
-      fullChar = char;
-      fullImageIndex = index;
-      const fs = document.getElementById('fullscreen');
-      const img = document.getElementById('fullscreenImg');
-      img.src = `images/${char}${index === 1 ? '1.jpeg' : '2.gif'}`;
-      img.onerror = function () {
-        img.src = `images/${char}2.gif`;
-        fullImageIndex = 2;
-      };
-      fs.style.display = 'flex';
-    }
-
-    function onFullScreenClick() {
-      if (fullImageIndex === 1) {
-        fullImageIndex = 2;
-        document.getElementById('fullscreenImg').src = `images/${fullChar}2.gif`;
-      } else {
-        document.getElementById('fullscreen').style.display = 'none';
-      }
-    }
-
-    window.onload = createSheetButtons;
+    // 預設載入第一份試算表
+    loadSheet();
   </script>
 </body>
 </html>
