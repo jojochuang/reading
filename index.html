@@ -59,8 +59,10 @@
       z-index: 1000;
     }
     #fullscreen-img {
-      max-width: 90vw;
+      width: 80vw;
+      height: auto;
       max-height: 80vh;
+      object-fit: contain;
     }
   </style>
   <script src="strokeMap.js"></script>
@@ -105,7 +107,7 @@
       fetch(url)
         .then(response => response.text())
         .then(csv => {
-          const lines = csv.split('\n').map(line => line.trim());
+          const lines = csv.split(/\r?\n/).map(line => line.trim());
           allLessons = {};
           const headers = lines[0].split(',');
           for (let col = 0; col < headers.length; col++) {
