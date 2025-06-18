@@ -64,19 +64,14 @@
     }
   </style>
   <script src="strokeMap.js"></script>
-  <script>
-    if (typeof strokeMap === 'undefined') {
-      var strokeMap = {};
-    }
-  </script>
 </head>
-<body ontouchstart="">
+<body>
   <select id="sheet-select" onchange="loadSheet()">
-    <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
-    <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
-    <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
-    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
-  </select>
+  <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
+  <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
+  <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
+  <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
+</select>
   <select id="lesson-select" onchange="changeLesson()"></select>
 
   <div class="sentence" id="sentence"></div>
@@ -107,12 +102,10 @@
 
     function loadSheet() {
       const url = sheetSelect.value;
-      sentenceContainer.innerHTML = '<p>📖 載入課本中...</p>';
       fetch(url)
         .then(response => response.text())
         .then(csv => {
-          const lines = csv.split(/?
-/).map(line => line.trim()).filter(line => line.length);
+          const lines = csv.split('\n').map(line => line.trim());
           allLessons = {};
           const headers = lines[0].split(',');
           for (let col = 0; col < headers.length; col++) {
@@ -122,13 +115,9 @@
               const cells = lines[row].split(',');
               if (cells[col]) content.push(cells[col]);
             }
-            if (title && content.length > 0) allLessons[title] = content;
+            if (title) allLessons[title] = content;
           }
           populateLessons();
-        })
-        .catch(error => {
-          sentenceContainer.innerHTML = '<p style="color:red">🚫 載入失敗，請重新選擇課本</p>';
-          console.error('錯誤：無法載入試算表', error);
         });
     }
 
@@ -141,24 +130,21 @@
         option.textContent = title;
         lessonSelect.appendChild(option);
       });
-      if (lessonTitles.length > 0) changeLesson();
+      changeLesson();
     }
 
     function changeLesson() {
       const index = lessonSelect.value;
       const title = lessonTitles[index];
-      sentences = allLessons[title] || [];
+      sentences = allLessons[title];
       current = 0;
       renderSentence();
     }
 
     function renderSentence() {
+      const sentence = sentences[current];
       sentenceContainer.innerHTML = '';
-      if (!sentences[current]) {
-        sentenceContainer.innerHTML = '<p>（這一課目前沒有內容）</p>';
-        return;
-      }
-      for (const char of sentences[current]) {
+      for (const char of sentence) {
         const span = document.createElement("span");
         span.textContent = char;
         span.className = "char";
@@ -170,23 +156,16 @@
     function showFullscreen(char) {
       currentChar = char;
       fullscreenStep = 0;
-      fullscreenImg.src = `${char}1.JPEG`;
-      fullscreenImg.alt = `${char}`;
+      fullscreenImg.src = `JPEG/${char}1.JPEG`;
       fullscreenView.style.display = "flex";
     }
 
     function cycleFullscreen() {
       fullscreenStep++;
       if (fullscreenStep === 1) {
-        const strokeValue = strokeMap[currentChar];
-        if (strokeValue) {
-          let gifUrl = '';
-          if (/^https?:\/\//.test(strokeValue)) {
-            gifUrl = strokeValue;
-          } else {
-            gifUrl = `https://www.twpen.com/bishun-animation/${strokeValue}-stroke-order.gif`;
-          }
-          fullscreenImg.src = gifUrl;
+        const strokeId = strokeMap[currentChar];
+        if (strokeId) {
+          fullscreenImg.src = `https://www.twpen.com/bishun-animation/${strokeId}-stroke-order.gif`;
         } else {
           fullscreenImg.src = '';
           fullscreenImg.alt = '找不到筆順動畫';
@@ -196,44 +175,23 @@
       }
     }
 
-    function speak(text) {
-      if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'zh-TW';
-        u.rate = 0.75;
-        let interval = setInterval(() => {
-          const voices = window.speechSynthesis.getVoices();
-          if (voices.length) {
-            let zhVoices = voices.filter(v => v.lang === 'zh-TW');
-            let preferred = zhVoices.find(v => v.name.includes("美佳") || v.name.includes("Meijia"));
-            if (!preferred && zhVoices.length) preferred = zhVoices[0];
-            if (preferred) u.voice = preferred;
-            clearInterval(interval);
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(u);
-          }
-        }, 200);
-      }
-    }
-
     function playAudio() {
-      if (sentences.length && sentences[current]) speak(sentences[current]);
+      const msg = new SpeechSynthesisUtterance(sentences[current]);
+      msg.lang = 'zh-TW';
+      speechSynthesis.speak(msg);
     }
 
     function nextSentence() {
-      if (sentences.length > 0) {
-        current = (current + 1) % sentences.length;
-        renderSentence();
-      }
+      current = (current + 1) % sentences.length;
+      renderSentence();
     }
 
     function prevSentence() {
-      if (sentences.length > 0) {
-        current = (current - 1 + sentences.length) % sentences.length;
-        renderSentence();
-      }
+      current = (current - 1 + sentences.length) % sentences.length;
+      renderSentence();
     }
 
+    // 預設載入第一份試算表
     loadSheet();
   </script>
 </body>
