@@ -63,6 +63,7 @@
       max-height: 80vh;
     }
   </style>
+  <script src="strokeMap.js"></script>
 </head>
 <body>
   <select id="sheet-select" onchange="loadSheet()">
@@ -155,14 +156,20 @@
     function showFullscreen(char) {
       currentChar = char;
       fullscreenStep = 0;
-      fullscreenImg.src = `${char}1.JPEG`;
+      fullscreenImg.src = `JPEG/${char}1.JPEG`;
       fullscreenView.style.display = "flex";
     }
 
     function cycleFullscreen() {
       fullscreenStep++;
       if (fullscreenStep === 1) {
-        fullscreenImg.src = `${currentChar}2.GIF`;
+        const strokeId = strokeMap[currentChar];
+        if (strokeId) {
+          fullscreenImg.src = `https://www.twpen.com/bishun-animation/${strokeId}-stroke-order.gif`;
+        } else {
+          fullscreenImg.src = '';
+          fullscreenImg.alt = '找不到筆順動畫';
+        }
       } else {
         fullscreenView.style.display = "none";
       }
