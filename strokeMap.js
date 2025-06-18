@@ -23,5 +23,5 @@ const strokeMap = {
   "五": "https://www.twpen.com/bishun-animation/4e94-stroke-order.gif",
   "井": "https://www.twpen.com/bishun-animation/4e95-stroke-order.gif",
   "些": "https://www.twpen.com/bishun-animation/4e9b-stroke-order.gif",
-  "我": "6211"
+  "我": "https://www.twpen.com/bishun-animation/6211-stroke-order.gif"
 };
