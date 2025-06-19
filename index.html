@@ -59,10 +59,16 @@
       z-index: 1000;
     }
     #fullscreen-img {
-      width: 80vw;
+      width: auto;
       height: auto;
-      max-height: 80vh;
+      max-width: 90vw;
+      max-height: 90vh;
       object-fit: contain;
+    }
+    html, body {
+      height: 100%;
+      touch-action: manipulation;
+      -webkit-overflow-scrolling: touch;
     }
   </style>
   <script src="strokeMap.js"></script>
@@ -178,9 +184,14 @@
     }
 
     function playAudio() {
-      const msg = new SpeechSynthesisUtterance(sentences[current]);
-      msg.lang = 'zh-TW';
-      speechSynthesis.speak(msg);
+      const voices = window.speechSynthesis.getVoices();
+      const utter = new SpeechSynthesisUtterance(sentences[current]);
+      utter.lang = 'zh-TW';
+      utter.rate = 0.75;
+      const preferred = voices.find(v => v.lang === 'zh-TW' && (v.name.includes('Meijia') || v.name.includes('美佳')));
+      if (preferred) utter.voice = preferred;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utter);
     }
 
     function nextSentence() {
@@ -193,7 +204,6 @@
       renderSentence();
     }
 
-    // 預設載入第一份試算表
     loadSheet();
   </script>
 </body>
