@@ -163,7 +163,7 @@
     function renderSentence() {
       const sentence = sentences[current];
       sentenceContainer.innerHTML = '';
-      if (!sentence) return; // 🛡️ 防止空句錯誤
+      if (!sentence) return;
       for (const char of sentence) {
         const span = document.createElement("span");
         span.textContent = char;
@@ -194,6 +194,7 @@
       const sentence = sentences[current];
       sequence = [];
       for (const c of sentence) {
+        if (!/[\u4E00-\u9FFF]/.test(c)) continue;
         sequence.push(`${c}1.JPEG`);
         if (strokeMap[c]) sequence.push(strokeMap[c]);
       }
