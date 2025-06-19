@@ -25,12 +25,28 @@
     .char {
       margin: 0 0.3em;
       display: inline-block;
-      cursor: pointer;
       padding: 0.2em 0.4em;
       border-radius: 10px;
-      background: #ffefd5;
+      background: #eee;
       box-shadow: 2px 2px 5px #ccc;
       transition: transform 0.2s;
+      position: relative;
+    }
+    .char.has-img {
+      background: #ffefd5;
+      cursor: pointer;
+    }
+    .char.preview-only {
+      background: #eee;
+    }
+    .char.no-stroke {
+      background: #ddd;
+    }
+    .char.has-img img.preview {
+      display: block;
+      width: 40px;
+      height: auto;
+      margin: 0 auto;
     }
     .char:active {
       transform: scale(1.2);
@@ -65,21 +81,16 @@
       max-height: 90vh;
       object-fit: contain;
     }
-    html, body {
-      height: 100%;
-      touch-action: manipulation;
-      -webkit-overflow-scrolling: touch;
-    }
   </style>
   <script src="strokeMap.js"></script>
 </head>
 <body>
   <select id="sheet-select" onchange="loadSheet()">
-  <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
-  <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
-  <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
-  <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
-</select>
+    <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
+    <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
+    <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
+    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
+  </select>
   <select id="lesson-select" onchange="changeLesson()"></select>
 
   <div class="sentence" id="sentence"></div>
@@ -90,7 +101,7 @@
     <button onclick="nextSentence()">➡️ 下一句</button>
   </div>
 
-  <div id="fullscreen-view" onclick="cycleFullscreen()">
+  <div id="fullscreen-view">
     <img id="fullscreen-img" src="" alt="" />
   </div>
 
@@ -99,8 +110,8 @@
     let lessonTitles = [];
     let sentences = [];
     let current = 0;
-    let fullscreenStep = 0;
-    let currentChar = '';
+    let sequence = [];
+    let currentIndex = 0;
 
     const sheetSelect = document.getElementById("sheet-select");
     const lessonSelect = document.getElementById("lesson-select");
@@ -152,35 +163,76 @@
     function renderSentence() {
       const sentence = sentences[current];
       sentenceContainer.innerHTML = '';
+      if (!sentence) return; // 🛡️ 防止空句錯誤
       for (const char of sentence) {
         const span = document.createElement("span");
         span.textContent = char;
         span.className = "char";
-        span.onclick = () => showFullscreen(char);
+
+        const hasStroke = strokeMap.hasOwnProperty(char);
+        if (!hasStroke) {
+          span.classList.add("no-stroke");
+        }
+
+        const imgPath = `${char}1.JPEG`;
+        const img = new Image();
+        img.src = imgPath;
+        img.onload = () => {
+          span.classList.add("has-img");
+          const preview = document.createElement("img");
+          preview.src = imgPath;
+          preview.className = "preview";
+          span.appendChild(preview);
+          span.onclick = () => showImageSequence(char);
+        };
+
         sentenceContainer.appendChild(span);
       }
     }
 
-    function showFullscreen(char) {
-      currentChar = char;
-      fullscreenStep = 0;
-      fullscreenImg.src = `${char}1.JPEG`;
+    function showImageSequence(char) {
+      const sentence = sentences[current];
+      sequence = [];
+      for (const c of sentence) {
+        sequence.push(`${c}1.JPEG`);
+        if (strokeMap[c]) sequence.push(strokeMap[c]);
+      }
+      currentIndex = sequence.indexOf(`${char}1.JPEG`);
+      showCurrentImage();
       fullscreenView.style.display = "flex";
     }
 
-    function cycleFullscreen() {
-      fullscreenStep++;
-      if (fullscreenStep === 1) {
-        const strokeId = strokeMap[currentChar];
-        if (strokeId) {
-          fullscreenImg.src = `${strokeId}`;
+    function showCurrentImage() {
+      fullscreenImg.src = sequence[currentIndex] || '';
+    }
+
+    fullscreenView.addEventListener('touchstart', handleTouchStart, false);
+    fullscreenView.addEventListener('touchend', handleTouchEnd, false);
+
+    let xStart = null;
+
+    function handleTouchStart(e) {
+      xStart = e.changedTouches[0].clientX;
+    }
+
+    function handleTouchEnd(e) {
+      if (xStart === null) return;
+      let xEnd = e.changedTouches[0].clientX;
+      let deltaX = xEnd - xStart;
+      if (Math.abs(deltaX) > 30) {
+        if (deltaX < 0) {
+          currentIndex++;
+          if (currentIndex >= sequence.length) fullscreenView.style.display = "none";
+          else showCurrentImage();
         } else {
-          fullscreenImg.src = '';
-          fullscreenImg.alt = '找不到筆順動畫';
+          currentIndex--;
+          if (currentIndex < 0) fullscreenView.style.display = "none";
+          else showCurrentImage();
         }
       } else {
         fullscreenView.style.display = "none";
       }
+      xStart = null;
     }
 
     function playAudio() {
@@ -195,12 +247,16 @@
     }
 
     function nextSentence() {
-      current = (current + 1) % sentences.length;
+      do {
+        current = (current + 1) % sentences.length;
+      } while (!sentences[current]);
       renderSentence();
     }
 
     function prevSentence() {
-      current = (current - 1 + sentences.length) % sentences.length;
+      do {
+        current = (current - 1 + sentences.length) % sentences.length;
+      } while (!sentences[current]);
       renderSentence();
     }
 
