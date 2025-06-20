@@ -81,6 +81,16 @@
       max-height: 90vh;
       object-fit: contain;
     }
+    .sentence-index {
+      font-size: 1.2rem;
+      color: #888;
+      margin-top: 0.5rem;
+    }
+    .end-indicator {
+      font-size: 1.5rem;
+      color: #888;
+      margin-top: 1rem;
+    }
   </style>
   <script src="strokeMap.js"></script>
 </head>
@@ -93,7 +103,9 @@
   </select>
   <select id="lesson-select" onchange="changeLesson()"></select>
 
+  <div class="sentence-index" id="sentence-index"></div>
   <div class="sentence" id="sentence"></div>
+  <div class="end-indicator" id="end-indicator"></div>
 
   <div class="controls">
     <button onclick="prevSentence()">⬅️ 上一句</button>
@@ -116,6 +128,8 @@
     const sheetSelect = document.getElementById("sheet-select");
     const lessonSelect = document.getElementById("lesson-select");
     const sentenceContainer = document.getElementById("sentence");
+    const sentenceIndexContainer = document.getElementById("sentence-index");
+    const endIndicator = document.getElementById("end-indicator");
     const fullscreenView = document.getElementById("fullscreen-view");
     const fullscreenImg = document.getElementById("fullscreen-img");
 
@@ -163,6 +177,8 @@
     function renderSentence() {
       const sentence = sentences[current];
       sentenceContainer.innerHTML = '';
+      sentenceIndexContainer.textContent = `第 ${current + 1} 句 / 共 ${sentences.length} 句`;
+      endIndicator.textContent = (current === sentences.length - 1) ? '📚 課文已經結束' : '';
       if (!sentence) return;
       for (const char of sentence) {
         const span = document.createElement("span");
