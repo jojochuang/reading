@@ -111,6 +111,7 @@
     <button onclick="prevSentence()">⬅️ 上一句</button>
     <button onclick="playAudio()">🔊 播放語音</button>
     <button onclick="nextSentence()">➡️ 下一句</button>
+    <button onclick="goToFirst()">🔁 回到第一句</button>
   </div>
 
   <div id="fullscreen-view">
@@ -274,6 +275,11 @@
       do {
         current = (current - 1 + sentences.length) % sentences.length;
       } while (!sentences[current]);
+      renderSentence();
+    }
+
+    function goToFirst() {
+      current = 0;
       renderSentence();
     }
 
