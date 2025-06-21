@@ -99,7 +99,7 @@
     <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
     <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
     <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
-    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
+    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">認字</option>
   </select>
   <select id="lesson-select" onchange="changeLesson()"></select>
 
@@ -193,6 +193,7 @@
 
         const imgPath = `${char}1.JPEG`;
         const img = new Image();
+        img.src = imgPath;
         img.onload = () => {
           span.classList.add("has-img");
           const preview = document.createElement("img");
@@ -201,10 +202,6 @@
           span.appendChild(preview);
           span.onclick = () => showImageSequence(char);
         };
-        img.onerror = () => {
-          // no preview
-        };
-        img.src = imgPath;
 
         sentenceContainer.appendChild(span);
       }
