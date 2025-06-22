@@ -12,7 +12,7 @@
       text-align: center;
       overflow-x: hidden;
     }
-    select, input[type="text"] {
+    select {
       margin-top: 1rem;
       font-size: 1.2rem;
       padding: 0.5rem;
@@ -99,14 +99,9 @@
     <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
     <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
     <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
-    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">生活華語3</option>
+    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">認字</option>
   </select>
   <select id="lesson-select" onchange="changeLesson()"></select>
-
-  <div>
-    <input type="text" id="char-search" placeholder="🔍 搜尋單字..." oninput="searchChar()" />
-    <div class="sentence" id="search-result"></div>
-  </div>
 
   <div class="sentence-index" id="sentence-index"></div>
   <div class="sentence" id="sentence"></div>
@@ -124,13 +119,69 @@
   </div>
 
   <script>
-    function searchChar() {
-      const query = document.getElementById("char-search").value.trim();
-      const container = document.getElementById("search-result");
-      container.innerHTML = '';
-      if (!query) return;
+    let allLessons = {};
+    let lessonTitles = [];
+    let sentences = [];
+    let current = 0;
+    let sequence = [];
+    let currentIndex = 0;
 
-      for (const char of query) {
+    const sheetSelect = document.getElementById("sheet-select");
+    const lessonSelect = document.getElementById("lesson-select");
+    const sentenceContainer = document.getElementById("sentence");
+    const sentenceIndexContainer = document.getElementById("sentence-index");
+    const endIndicator = document.getElementById("end-indicator");
+    const fullscreenView = document.getElementById("fullscreen-view");
+    const fullscreenImg = document.getElementById("fullscreen-img");
+
+    function loadSheet() {
+      const url = sheetSelect.value;
+      fetch(url)
+        .then(response => response.text())
+        .then(csv => {
+          const lines = csv.split(/\r?\n/).map(line => line.trim());
+          allLessons = {};
+          const headers = lines[0].split(',');
+          for (let col = 0; col < headers.length; col++) {
+            const title = headers[col];
+            const content = [];
+            for (let row = 1; row < lines.length; row++) {
+              const cells = lines[row].split(',');
+              if (cells[col]) content.push(cells[col]);
+            }
+            if (title) allLessons[title] = content;
+          }
+          populateLessons();
+        });
+    }
+
+    function populateLessons() {
+      lessonSelect.innerHTML = '';
+      lessonTitles = Object.keys(allLessons);
+      lessonTitles.forEach((title, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = title;
+        lessonSelect.appendChild(option);
+      });
+      changeLesson();
+    }
+
+    function changeLesson() {
+      const index = lessonSelect.value;
+      const title = lessonTitles[index];
+      sentences = allLessons[title];
+      current = 0;
+      renderSentence();
+    }
+
+    function renderSentence() {
+      const sentence = sentences[current];
+      sentenceContainer.innerHTML = '';
+      sentenceIndexContainer.textContent = `第 ${current + 1} 句 / 共 ${sentences.length} 句`;
+      endIndicator.textContent = (current === sentences.length - 1) ? '📚 課文已經結束' : '';
+      if (!sentence) return;
+      for (const char of sentence) {
         const span = document.createElement("span");
         span.textContent = char;
         span.className = "char";
@@ -142,44 +193,118 @@
 
         const imgPath = `${char}1.JPEG`;
         const img = new Image();
+        img.src = imgPath;
         img.onload = () => {
           span.classList.add("has-img");
           const preview = document.createElement("img");
           preview.src = imgPath;
           preview.className = "preview";
           span.appendChild(preview);
-          span.onclick = () => showImageSequenceForChar(char);
+          span.onclick = () => showImageSequence(char);
         };
-        img.onerror = () => {};
-        img.src = imgPath;
 
-        container.appendChild(span);
+        sentenceContainer.appendChild(span);
       }
     }
 
-    function showImageSequenceForChar(char) {
+    function showImageSequence(char) {
+      const sentence = sentences[current];
       sequence = [];
-      if (!/[一-鿿]/.test(char)) return;
-
-      const jpeg = `${char}1.JPEG`;
-      const img = new Image();
-      img.onload = () => {
-        sequence.push(jpeg);
-        if (strokeMap[char]) sequence.push(strokeMap[char]);
-        currentIndex = 0;
-        showCurrentImage();
-        fullscreenView.style.display = "flex";
-      };
-      img.onerror = () => {
-        if (strokeMap[char]) {
-          sequence.push(strokeMap[char]);
-          currentIndex = 0;
-          showCurrentImage();
-          fullscreenView.style.display = "flex";
-        }
-      };
-      img.src = jpeg;
+      for (const c of sentence) {
+        if (!/[\u4E00-\u9FFF]/.test(c)) continue;
+        sequence.push(`${c}1.JPEG`);
+        if (strokeMap[c]) sequence.push(strokeMap[c]);
+      }
+      currentIndex = sequence.indexOf(`${char}1.JPEG`);
+      showCurrentImage();
+      fullscreenView.style.display = "flex";
     }
+
+    function showCurrentImage() {
+      fullscreenImg.src = sequence[currentIndex] || '';
+    }
+
+    fullscreenView.addEventListener('touchstart', handleTouchStart, false);
+    fullscreenView.addEventListener('touchend', handleTouchEnd, false);
+
+    let xStart = null;
+
+    function handleTouchStart(e) {
+      xStart = e.changedTouches[0].clientX;
+    }
+
+    function handleTouchEnd(e) {
+      if (xStart === null) return;
+      let xEnd = e.changedTouches[0].clientX;
+      let deltaX = xEnd - xStart;
+      if (Math.abs(deltaX) > 30) {
+        if (deltaX < 0) {
+          currentIndex++;
+          if (currentIndex >= sequence.length) fullscreenView.style.display = "none";
+          else showCurrentImage();
+        } else {
+          currentIndex--;
+          if (currentIndex < 0) fullscreenView.style.display = "none";
+          else showCurrentImage();
+        }
+      } else {
+        fullscreenView.style.display = "none";
+      }
+      xStart = null;
+    }
+function playAudio() {
+  const text = document.getElementById("sentence").innerText.trim();
+  if (!text) return;
+
+  if ('speechSynthesis' in window) {
+    const synth = window.speechSynthesis;
+    let voices = synth.getVoices();
+
+    if (!voices.length) {
+      synth.onvoiceschanged = () => playAudio(); // fallback for iPad
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-TW';
+    utterance.rate = 0.75;
+
+    let zhVoices = voices.filter(v => v.lang === 'zh-TW');
+    let preferred = zhVoices.find(v => v.name.includes("美佳") || v.name.includes("Meijia"));
+    if (!preferred && zhVoices.length > 0) {
+      preferred = zhVoices[0];
+    }
+    if (preferred) {
+      utterance.voice = preferred;
+    }
+
+    synth.cancel();
+    synth.speak(utterance);
+  } else {
+    alert("此裝置不支援語音播放");
+  }
+}
+    function nextSentence() {
+      do {
+        current = (current + 1) % sentences.length;
+      } while (!sentences[current]);
+      renderSentence();
+    }
+
+    function prevSentence() {
+      do {
+        current = (current - 1 + sentences.length) % sentences.length;
+      } while (!sentences[current]);
+      renderSentence();
+    }
+
+    function goToFirst() {
+      current = 0;
+      renderSentence();
+    }
+
+    loadSheet();
   </script>
 </body>
 </html>
+
