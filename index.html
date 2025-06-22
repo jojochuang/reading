@@ -194,14 +194,19 @@
         const imgPath = `${char}1.JPEG`;
         const img = new Image();
         img.src = imgPath;
-        img.onload = () => {
-          span.classList.add("has-img");
-          const preview = document.createElement("img");
-          preview.src = imgPath;
-          preview.className = "preview";
-          span.appendChild(preview);
-          span.onclick = () => showImageSequence(char);
-        };
+img.onload = () => {
+  span.classList.add("has-img");
+  const preview = document.createElement("img");
+  preview.src = imgPath;
+  preview.className = "preview";
+  span.appendChild(preview);
+};
+img.onerror = () => {
+  // 即使沒有 JPEG 也允許點擊，進入筆順圖
+};
+
+span.onclick = () => showImageSequence(char);  // 總是設置點擊事件
+
 
         sentenceContainer.appendChild(span);
       }
