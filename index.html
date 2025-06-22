@@ -91,6 +91,9 @@
       color: #888;
       margin-top: 1rem;
     }
+    .char.has-stroke {
+  background: #fffacd; /* 淡黃色代表有筆順圖 */
+}
   </style>
   <script src="strokeMap.js"></script>
 </head>
@@ -186,11 +189,11 @@
         span.textContent = char;
         span.className = "char";
 
-        const hasStroke = strokeMap.hasOwnProperty(char);
-        if (!hasStroke) {
-          span.classList.add("no-stroke");
+        if (strokeMap.hasOwnProperty(char)) {
+         span.classList.add("has-stroke");
+        } else {
+         span.classList.add("no-stroke");
         }
-
         const imgPath = `${char}1.JPEG`;
         const img = new Image();
         img.src = imgPath;
