@@ -252,18 +252,38 @@
       }
       xStart = null;
     }
+function playAudio() {
+  const text = document.getElementById("sentence").innerText.trim();
+  if (!text) return;
 
-    function playAudio() {
-      const voices = window.speechSynthesis.getVoices();
-      const utter = new SpeechSynthesisUtterance(sentences[current]);
-      utter.lang = 'zh-TW';
-      utter.rate = 0.75;
-      const preferred = voices.find(v => v.lang === 'zh-TW' && (v.name.includes('Meijia') || v.name.includes('美佳')));
-      if (preferred) utter.voice = preferred;
-      speechSynthesis.cancel();
-      speechSynthesis.speak(utter);
+  if ('speechSynthesis' in window) {
+    const synth = window.speechSynthesis;
+    let voices = synth.getVoices();
+
+    if (!voices.length) {
+      synth.onvoiceschanged = () => playAudio(); // fallback for iPad
+      return;
     }
 
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-TW';
+    utterance.rate = 0.75;
+
+    let zhVoices = voices.filter(v => v.lang === 'zh-TW');
+    let preferred = zhVoices.find(v => v.name.includes("美佳") || v.name.includes("Meijia"));
+    if (!preferred && zhVoices.length > 0) {
+      preferred = zhVoices[0];
+    }
+    if (preferred) {
+      utterance.voice = preferred;
+    }
+
+    synth.cancel();
+    synth.speak(utterance);
+  } else {
+    alert("此裝置不支援語音播放");
+  }
+}
     function nextSentence() {
       do {
         current = (current + 1) % sentences.length;
