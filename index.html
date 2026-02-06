@@ -1,16 +1,41 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>中文教學展示</title>
   <style>
+    /* 繁體中文字體堆疊 - 優先使用繁體字體 */
+    @font-face {
+      font-family: 'TraditionalChinese';
+      unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2A700-2B73F, U+2B740-2B81F, U+2B820-2CEAF;
+    }
+    
     body {
       margin: 0;
-      font-family: "Comic Sans MS", sans-serif;
+      /* 繁體中文字體優先順序：系統繁體字體 > 通用中文字體 > 備用字體 */
+      font-family: 
+        "PingFang TC", "Microsoft JhengHei", "Microsoft YaHei", 
+        "Heiti TC", "STHeiti", "LiHei Pro", "LiSong Pro", 
+        "BiauKai", "KaiTi", "DFKai-SB", "標楷體", "新細明體",
+        "Comic Sans MS", sans-serif;
       background-color: #fff8f0;
       text-align: center;
       overflow-x: hidden;
+      /* 確保繁體中文正確渲染 */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    /* 針對中文字符特別指定字體 */
+    .sentence, .char {
+      font-family: 
+        "PingFang TC", "Microsoft JhengHei", "Microsoft YaHei", 
+        "Heiti TC", "STHeiti", "LiHei Pro", "LiSong Pro", 
+        "BiauKai", "KaiTi", "DFKai-SB", "標楷體", "新細明體",
+        "Comic Sans MS", sans-serif;
+      /* 使用繁體中文渲染 */
+      font-feature-settings: "kern" 1, "liga" 1;
     }
     select {
       margin-top: 1rem;
@@ -67,19 +92,61 @@
     #fullscreen-view {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: white;
+      background: rgba(0, 0, 0, 0.95);
       display: none;
       align-items: center;
       justify-content: center;
       flex-direction: column;
       z-index: 1000;
+      /* 防止背景滾動 */
+      touch-action: none;
+      -webkit-overflow-scrolling: touch;
     }
     #fullscreen-img {
       width: auto;
       height: auto;
-      max-width: 90vw;
-      max-height: 90vh;
+      max-width: 95vw;
+      max-height: 95vh;
       object-fit: contain;
+      /* 平滑過渡效果 */
+      transition: opacity 0.3s ease;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* 圖片載入指示器 */
+    #fullscreen-img.loading {
+      opacity: 0.5;
+    }
+    /* 關閉按鈕 */
+    .close-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 24px;
+      cursor: pointer;
+      z-index: 1001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    /* 圖片索引指示器 */
+    .image-counter {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 1rem;
     }
     .sentence-index {
       font-size: 1.2rem;
@@ -95,7 +162,34 @@
   background: #fffacd; /* 淡黃色代表有筆順圖 */
 }
   </style>
-  <script src="strokeMap.js"></script>
+  <script src="strokeMap.js?v=20250203"></script>
+  <script>
+    // 檢查 strokeMap 是否正確載入
+    window.addEventListener('load', () => {
+      if (typeof strokeMap === 'undefined') {
+        console.error('❌ strokeMap.js 沒有正確載入！');
+        alert('警告：筆順圖資料沒有正確載入，請重新整理頁面或清除瀏覽器快取');
+      } else {
+        const totalChars = Object.keys(strokeMap).length;
+        console.log(`✅ strokeMap 已載入，共有 ${totalChars} 個字`);
+        
+        // 檢查特定字是否存在（用於調試）
+        const testChars = ['胖', '往', '失', '化', '虹', '食'];
+        const missing = testChars.filter(char => !strokeMap.hasOwnProperty(char));
+        if (missing.length > 0) {
+          console.warn(`⚠️  以下字沒有在 strokeMap 中: ${missing.join(', ')}`);
+          console.warn('這可能是瀏覽器快取問題，請清除快取後重新載入');
+        } else {
+          console.log('✅ 測試字（胖、往、失、化、虹、食）都在 strokeMap 中');
+        }
+        
+        // 如果字數少於預期，可能是舊版本
+        if (totalChars < 650) {
+          console.warn(`⚠️  strokeMap 字數較少（${totalChars}），可能是舊版本，建議清除快取`);
+        }
+      }
+    });
+  </script>
 </head>
 <body>
   <select id="sheet-select" onchange="loadSheet()">
@@ -118,7 +212,9 @@
   </div>
 
   <div id="fullscreen-view">
+    <button class="close-btn" onclick="closeFullscreen()" aria-label="關閉">✕</button>
     <img id="fullscreen-img" src="" alt="" />
+    <div class="image-counter" id="image-counter"></div>
   </div>
 
   <script>
@@ -128,6 +224,9 @@
     let current = 0;
     let sequence = [];
     let currentIndex = 0;
+    // 圖片預載快取
+    let imageCache = new Map();
+    let preloadPromises = [];
 
     const sheetSelect = document.getElementById("sheet-select");
     const lessonSelect = document.getElementById("lesson-select");
@@ -215,6 +314,48 @@ span.onclick = () => showImageSequence(char);  // 總是設置點擊事件
       }
     }
 
+    // 預載單張圖片
+    function preloadImage(src) {
+      // 如果已經在快取中，直接返回已解決的 Promise
+      if (imageCache.has(src)) {
+        return Promise.resolve(imageCache.get(src));
+      }
+      
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          imageCache.set(src, img);
+          resolve(img);
+        };
+        img.onerror = () => {
+          // 即使載入失敗也快取，避免重複嘗試
+          imageCache.set(src, null);
+          reject(new Error(`Failed to load: ${src}`));
+        };
+        img.src = src;
+      });
+    }
+
+    // 預載所有圖片
+    function preloadAllImages() {
+      preloadPromises = [];
+      const imageCounter = document.getElementById("image-counter");
+      
+      sequence.forEach((src, index) => {
+        const promise = preloadImage(src).catch(() => {
+          // 忽略載入失敗的圖片，繼續載入其他圖片
+        });
+        preloadPromises.push(promise);
+        
+        // 更新載入進度（可選，如果需要顯示進度）
+        promise.then(() => {
+          const loaded = preloadPromises.filter(p => p.status === 'resolved' || 
+            (p instanceof Promise && p._resolved)).length;
+          // 可以選擇顯示進度，但為了不干擾體驗，這裡先不顯示
+        });
+      });
+    }
+
     function showImageSequence(char) {
       const sentence = sentences[current];
       sequence = [];
@@ -224,42 +365,174 @@ span.onclick = () => showImageSequence(char);  // 總是設置點擊事件
         if (strokeMap[c]) sequence.push(strokeMap[c]);
       }
       currentIndex = sequence.indexOf(`${char}1.JPEG`);
-      showCurrentImage();
+      if (currentIndex === -1) currentIndex = 0; // 如果找不到，從第一個開始
+      
+      // 顯示全螢幕並立即顯示當前圖片
       fullscreenView.style.display = "flex";
+      document.body.style.overflow = 'hidden';
+      
+      // 顯示當前圖片（可能還沒預載）
+      showCurrentImage();
+      
+      // 開始預載所有圖片（在背景進行）
+      preloadAllImages();
     }
 
     function showCurrentImage() {
-      fullscreenImg.src = sequence[currentIndex] || '';
+      if (currentIndex < 0 || currentIndex >= sequence.length) {
+        closeFullscreen();
+        return;
+      }
+      const imageCounter = document.getElementById("image-counter");
+      imageCounter.textContent = `${currentIndex + 1} / ${sequence.length}`;
+      
+      const src = sequence[currentIndex];
+      
+      // 檢查圖片是否已經預載
+      if (imageCache.has(src) && imageCache.get(src) !== null) {
+        // 圖片已預載，直接顯示（無延遲）
+        fullscreenImg.src = src;
+        fullscreenImg.classList.remove('loading');
+      } else {
+        // 圖片未預載，顯示載入狀態並載入
+        fullscreenImg.classList.add('loading');
+        const img = new Image();
+        img.onload = () => {
+          imageCache.set(src, img);
+          fullscreenImg.src = src;
+          fullscreenImg.classList.remove('loading');
+        };
+        img.onerror = () => {
+          imageCache.set(src, null);
+          fullscreenImg.src = src; // 即使失敗也嘗試顯示
+          fullscreenImg.classList.remove('loading');
+        };
+        img.src = src;
+      }
+      
+      // 預載相鄰圖片（下一張和上一張），讓滑動更順暢
+      if (currentIndex + 1 < sequence.length) {
+        preloadImage(sequence[currentIndex + 1]).catch(() => {});
+      }
+      if (currentIndex - 1 >= 0) {
+        preloadImage(sequence[currentIndex - 1]).catch(() => {});
+      }
     }
 
-    fullscreenView.addEventListener('touchstart', handleTouchStart, false);
-    fullscreenView.addEventListener('touchend', handleTouchEnd, false);
+    function closeFullscreen() {
+      fullscreenView.style.display = "none";
+      document.body.style.overflow = '';
+    }
 
-    let xStart = null;
+    // 改進的觸控手勢處理 - 支援 iPad Safari
+    let touchStartX = null;
+    let touchStartY = null;
+    let isSwiping = false;
+    const SWIPE_THRESHOLD = 50; // 滑動閾值（像素）
+
+    fullscreenView.addEventListener('touchstart', handleTouchStart, { passive: true });
+    fullscreenView.addEventListener('touchmove', handleTouchMove, { passive: false });
+    fullscreenView.addEventListener('touchend', handleTouchEnd, { passive: true });
+    // 點擊關閉（非滑動時）
+    fullscreenView.addEventListener('click', (e) => {
+      if (e.target === fullscreenView && !isSwiping) {
+        closeFullscreen();
+      }
+    });
 
     function handleTouchStart(e) {
-      xStart = e.changedTouches[0].clientX;
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      isSwiping = false;
+    }
+
+    function handleTouchMove(e) {
+      if (touchStartX === null) return;
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - touchStartX);
+      const deltaY = Math.abs(touch.clientY - touchStartY);
+      
+      // 如果水平移動大於垂直移動，視為滑動
+      if (deltaX > deltaY && deltaX > 10) {
+        isSwiping = true;
+        // 防止頁面滾動
+        e.preventDefault();
+      }
     }
 
     function handleTouchEnd(e) {
-      if (xStart === null) return;
-      let xEnd = e.changedTouches[0].clientX;
-      let deltaX = xEnd - xStart;
-      if (Math.abs(deltaX) > 30) {
+      if (touchStartX === null || touchStartY === null) return;
+      
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - touchStartX;
+      const deltaY = touch.clientY - touchStartY;
+      const absDeltaX = Math.abs(deltaX);
+      const absDeltaY = Math.abs(deltaY);
+      
+      // 只有水平滑動距離大於垂直距離且超過閾值時才處理
+      if (isSwiping && absDeltaX > absDeltaY && absDeltaX > SWIPE_THRESHOLD) {
         if (deltaX < 0) {
+          // 向左滑動 - 下一張
           currentIndex++;
-          if (currentIndex >= sequence.length) fullscreenView.style.display = "none";
-          else showCurrentImage();
+          if (currentIndex >= sequence.length) {
+            currentIndex = sequence.length - 1; // 保持在最後一張
+          } else {
+            showCurrentImage();
+            // 預載下一張（如果存在）
+            if (currentIndex + 1 < sequence.length) {
+              preloadImage(sequence[currentIndex + 1]).catch(() => {});
+            }
+          }
         } else {
+          // 向右滑動 - 上一張
           currentIndex--;
-          if (currentIndex < 0) fullscreenView.style.display = "none";
-          else showCurrentImage();
+          if (currentIndex < 0) {
+            currentIndex = 0; // 保持在第一張
+          } else {
+            showCurrentImage();
+            // 預載上一張（如果存在）
+            if (currentIndex - 1 >= 0) {
+              preloadImage(sequence[currentIndex - 1]).catch(() => {});
+            }
+          }
         }
-      } else {
-        fullscreenView.style.display = "none";
       }
-      xStart = null;
+      
+      touchStartX = null;
+      touchStartY = null;
+      // 延遲重置 isSwiping，避免觸發點擊事件
+      setTimeout(() => { isSwiping = false; }, 100);
     }
+
+    // 鍵盤支援（桌面端）
+    document.addEventListener('keydown', (e) => {
+      if (fullscreenView.style.display === 'flex') {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          currentIndex--;
+          if (currentIndex < 0) currentIndex = 0;
+          else {
+            showCurrentImage();
+            // 預載上一張（如果存在）
+            if (currentIndex - 1 >= 0) {
+              preloadImage(sequence[currentIndex - 1]).catch(() => {});
+            }
+          }
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          currentIndex++;
+          if (currentIndex >= sequence.length) currentIndex = sequence.length - 1;
+          else {
+            showCurrentImage();
+            // 預載下一張（如果存在）
+            if (currentIndex + 1 < sequence.length) {
+              preloadImage(sequence[currentIndex + 1]).catch(() => {});
+            }
+          }
+        } else if (e.key === 'Escape') {
+          closeFullscreen();
+        }
+      }
+    });
 function playAudio() {
   const text = document.getElementById("sentence").innerText.trim();
   if (!text) return;
