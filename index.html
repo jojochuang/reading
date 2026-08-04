@@ -375,17 +375,15 @@
       <option value="__custom__" id="customSheetOption" hidden>自訂試算表</option>
     </select>
     <select id="lesson-select" onchange="changeLesson()"></select>
-    <button type="button" class="btn-custom" id="btnCustomSheet">自製認字清單</button>
+    <button type="button" class="btn-custom" id="btnCustomSheet">自製課文內容試算表</button>
   </div>
   <div class="source-tag" id="sourceTag" hidden></div>
 
   <div class="custom-sheet-panel" id="customSheetPanel" hidden>
-    <h2>自製上課認字清單／課文</h2>
+    <h2>自製課文內容試算表</h2>
     <ol>
       <li>開啟
-        <a href="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/edit" target="_blank" rel="noopener noreferrer">試算表範本（認字）</a>
-        或
-        <a href="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/edit" target="_blank" rel="noopener noreferrer">課文句子範例（南一國語一上）</a>，
+        <a href="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/edit" target="_blank" rel="noopener noreferrer">南一國語一上試算表範本</a>，
         使用「檔案 → 建立副本」複製到自己的雲端硬碟。
       </li>
       <li>依下方格式編輯自己的課名與內容。</li>
@@ -546,7 +544,9 @@
             }
             const table = payload.table || {};
             const cols = table.cols || [];
-            const header = cols.map((c) => (c && (c.label || c.id)) || "");
+            const labels = cols.map((c) => String((c && c.label) || "").trim());
+            // 若沒有真正的欄位標題，第 1 列資料就是 A1/B1/C1（課名）
+            const hasRealLabels = labels.some((l) => l && !/^[A-Z]{1,3}$/.test(l));
             const body = (table.rows || []).map((row) => {
               const cells = row.c || [];
               const out = [];
@@ -557,7 +557,7 @@
               }
               return out;
             });
-            finish(null, [header].concat(body));
+            finish(null, hasRealLabels ? [labels].concat(body) : body);
           } catch (e) {
             finish(e);
           }
