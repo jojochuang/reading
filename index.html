@@ -82,7 +82,8 @@
     .char:active {
       transform: scale(1.2);
     }
-    .dict-btn {
+    .dict-btn,
+    .yt-btn {
       display: none;
       margin-top: 0.25em;
       padding: 0.15em 0.35em;
@@ -95,7 +96,11 @@
       cursor: pointer;
       box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.25);
     }
-    .dict-btn.show {
+    .yt-btn {
+      background: #c4302b;
+    }
+    .dict-btn.show,
+    .yt-btn.show {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -105,7 +110,12 @@
       transform: scale(0.95);
       background: #3a7a8c;
     }
-    .dict-btn svg {
+    .yt-btn:active {
+      transform: scale(0.95);
+      background: #a3221e;
+    }
+    .dict-btn svg,
+    .yt-btn svg {
       width: 1.05em;
       height: 1.05em;
       fill: currentColor;
@@ -312,6 +322,9 @@
     }
 
     const dictImageCache = new Map(); // char -> true | false | pending Promise
+    const YT_SHEET_ID = "18yl3VhCmGH1bOVsCQF7cCRFAbyi8VkTaQH9vhJ3g9Rw";
+    const YT_SHEET_GID = "333758942";
+    let youtubeByChar = new Map(); // 字 -> YouTube URL
 
     function dictImagePath(char) {
       return `Character/${encodeURIComponent(char)}.png`;
@@ -343,6 +356,174 @@
       fullscreenView.style.display = "flex";
       document.body.style.overflow = "hidden";
       showCurrentImage();
+    }
+
+    function parseSimpleCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let inQuotes = false;
+      const src = String(text || "").replace(/^\uFEFF/, "");
+      for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        const next = src[i + 1];
+        if (inQuotes) {
+          if (ch === '"' && next === '"') {
+            cell += '"';
+            i++;
+          } else if (ch === '"') {
+            inQuotes = false;
+          } else {
+            cell += ch;
+          }
+        } else if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          row.push(cell);
+          cell = "";
+        } else if (ch === "\n") {
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = "";
+        } else if (ch !== "\r") {
+          cell += ch;
+        }
+      }
+      if (cell !== "" || row.length) {
+        row.push(cell);
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    function isYoutubeUrl(url) {
+      return /^https?:\/\/(www\.)?(youtu\.be\/|youtube\.com\/)/i.test(url || "");
+    }
+
+    function applyYoutubeRows(rows) {
+      const primary = new Map();
+      const related = new Map();
+      for (const row of rows) {
+        if (!row || !row.length) continue;
+        let url = "";
+        for (let i = 0; i < row.length; i++) {
+          const v = String(row[i] || "").trim();
+          if (isYoutubeUrl(v)) {
+            url = v;
+            break;
+          }
+        }
+        if (!url) url = String(row[5] || "").trim();
+        if (!isYoutubeUrl(url)) continue;
+
+        for (let col = 0; col < 5; col++) {
+          const cell = String(row[col] || "").trim();
+          if (!cell || isYoutubeUrl(cell)) continue;
+          for (const ch of cell) {
+            if (!/[\u4E00-\u9FFF]/.test(ch)) continue;
+            if (col === 0) primary.set(ch, url);
+            else if (!related.has(ch)) related.set(ch, url);
+          }
+        }
+      }
+      youtubeByChar = new Map([...related, ...primary]);
+      console.log(`✅ YouTube 字源影片對照已載入：${youtubeByChar.size} 字`);
+    }
+
+    function fetchYoutubeViaGvizJsonp() {
+      return new Promise((resolve, reject) => {
+        const cbName = "__ytSheetCb_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
+        const script = document.createElement("script");
+        let done = false;
+        const timer = setTimeout(() => finish(new Error("gviz timeout")), 25000);
+        function finish(err, rows) {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+          if (script.parentNode) script.parentNode.removeChild(script);
+          if (err) reject(err);
+          else resolve(rows);
+        }
+        window[cbName] = (payload) => {
+          try {
+            if (!payload || payload.status === "error") {
+              finish(new Error("gviz error"));
+              return;
+            }
+            const table = payload.table || {};
+            const cols = table.cols || [];
+            const rows = (table.rows || []).map((row) => {
+              const cells = row.c || [];
+              const out = [];
+              for (let i = 0; i < Math.max(cols.length, 6); i++) {
+                const cell = cells[i];
+                if (!cell) { out.push(""); continue; }
+                out.push(cell.f != null && String(cell.f) !== "" ? String(cell.f) : (cell.v == null ? "" : String(cell.v)));
+              }
+              return out;
+            });
+            finish(null, rows);
+          } catch (e) {
+            finish(e);
+          }
+        };
+        script.onerror = () => finish(new Error("gviz script load failed"));
+        script.src =
+          `https://docs.google.com/spreadsheets/d/${encodeURIComponent(YT_SHEET_ID)}/gviz/tq?tqx=responseHandler:${cbName};out:json&gid=${encodeURIComponent(YT_SHEET_GID)}&t=${Date.now()}`;
+        document.head.appendChild(script);
+      });
+    }
+
+    async function fetchYoutubeCsvText() {
+      const exportUrl =
+        `https://docs.google.com/spreadsheets/d/${YT_SHEET_ID}/export?format=csv&gid=${YT_SHEET_GID}`;
+      const gvizUrl =
+        `https://docs.google.com/spreadsheets/d/${YT_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${YT_SHEET_GID}`;
+      const candidates = [
+        exportUrl,
+        gvizUrl,
+        "https://api.allorigins.win/raw?url=" + encodeURIComponent(gvizUrl),
+        "https://api.allorigins.win/raw?url=" + encodeURIComponent(exportUrl),
+      ];
+      let lastErr = null;
+      for (const url of candidates) {
+        try {
+          const resp = await fetch(url, { cache: "no-store" });
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          const text = await resp.text();
+          const t = (text || "").trim();
+          if (!t || t.startsWith("<") || t.startsWith("{")) throw new Error("invalid csv");
+          return text;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("unable to fetch youtube sheet");
+    }
+
+    function loadYoutubeMap() {
+      return fetchYoutubeViaGvizJsonp()
+        .then((rows) => {
+          applyYoutubeRows(rows);
+          if (sentences.length) renderSentence();
+        })
+        .catch(() =>
+          fetchYoutubeCsvText().then((csv) => {
+            applyYoutubeRows(parseSimpleCsv(csv));
+            if (sentences.length) renderSentence();
+          })
+        )
+        .catch((err) => {
+          console.warn("YouTube 對照表載入失敗", err);
+        });
+    }
+
+    function openYoutubeForChar(char) {
+      const url = youtubeByChar.get(char);
+      if (!url) return;
+      window.open(url, "_blank", "noopener,noreferrer");
     }
 
     function renderSentence() {
@@ -399,6 +580,23 @@
           checkDictImage(char).then((exists) => {
             if (exists) dictBtn.classList.add("show");
           });
+
+          // YouTube：字有出現在試算表 A–E 才顯示
+          const ytUrl = youtubeByChar.get(char);
+          if (ytUrl) {
+            const ytBtn = document.createElement("button");
+            ytBtn.type = "button";
+            ytBtn.className = "yt-btn show";
+            ytBtn.title = "字源影片（YouTube）";
+            ytBtn.setAttribute("aria-label", `${char} YouTube 字源影片`);
+            ytBtn.innerHTML =
+              '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8zM9.75 15.5v-7l6.5 3.5-6.5 3.5z"/></svg>';
+            ytBtn.onclick = (e) => {
+              e.stopPropagation();
+              openYoutubeForChar(char);
+            };
+            unit.appendChild(ytBtn);
+          }
         }
 
         sentenceContainer.appendChild(unit);
@@ -675,6 +873,7 @@ function playAudio() {
       renderSentence();
     }
 
+    loadYoutubeMap();
     loadSheet();
   </script>
 </body>
