@@ -367,13 +367,7 @@
 </head>
 <body>
   <div class="top-bar">
-    <select id="sheet-select" onchange="onPresetSheetChange()">
-      <option value="13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0">南一國語一上</option>
-      <option value="16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA">生活華語1</option>
-      <option value="16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs">生活華語2</option>
-      <option value="18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM">認字</option>
-      <option value="__custom__" id="customSheetOption" hidden>自訂試算表</option>
-    </select>
+    <select id="sheet-select" onchange="onPresetSheetChange()"></select>
     <select id="lesson-select" onchange="changeLesson()"></select>
     <button type="button" class="btn-custom" id="btnCustomSheet">自製課文內容試算表</button>
   </div>
@@ -383,7 +377,7 @@
     <h2>自製課文內容試算表</h2>
     <ol>
       <li>開啟
-        <a href="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/edit" target="_blank" rel="noopener noreferrer">南一國語一上試算表範本</a>，
+        <a href="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/edit" target="_blank" rel="noopener noreferrer">國語一上試算表範本</a>，
         使用「檔案 → 建立副本」複製到自己的雲端硬碟。
       </li>
       <li>依下方格式編輯自己的課名與內容。</li>
@@ -408,6 +402,7 @@
     <p class="custom-sheet-hint">若網址中沒有 gid，會使用第一個工作表（gid=0）。</p>
     <div class="custom-sheet-actions">
       <button type="button" id="customSheetGenerate">產生上課連結</button>
+      <button type="button" id="customSheetAddOpen" style="background:#5b8def;">加入選單並開啟</button>
       <button type="button" id="customSheetClose" style="background:#bbb;">關閉說明</button>
     </div>
     <div id="customSheetErr" class="custom-sheet-err" hidden></div>
@@ -451,6 +446,13 @@
     let currentSheetId = "";
     let currentGid = "0";
     let pendingLessonIndex = 0; // 0-based
+    const DEFAULT_SHEET = {
+      id: "13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0",
+      gid: "0",
+      title: "國語一上", // 試算表檔名
+    };
+    const ADDED_SHEETS_KEY = "reading_added_sheets_v1";
+    const ADD_OPTION_VALUE = "__add__";
 
     const sheetSelect = document.getElementById("sheet-select");
     const lessonSelect = document.getElementById("lesson-select");
@@ -459,8 +461,108 @@
     const endIndicator = document.getElementById("end-indicator");
     const fullscreenView = document.getElementById("fullscreen-view");
     const fullscreenImg = document.getElementById("fullscreen-img");
-    const customSheetOption = document.getElementById("customSheetOption");
     const sourceTag = document.getElementById("sourceTag");
+
+    function readAddedSheets() {
+      try {
+        const list = JSON.parse(localStorage.getItem(ADDED_SHEETS_KEY) || "[]");
+        return Array.isArray(list) ? list.filter((s) => s && s.id) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function writeAddedSheets(list) {
+      try {
+        localStorage.setItem(ADDED_SHEETS_KEY, JSON.stringify(list || []));
+      } catch (_) {}
+    }
+
+    function getKnownSheets() {
+      const seen = new Set([DEFAULT_SHEET.id]);
+      const list = [DEFAULT_SHEET];
+      readAddedSheets().forEach((s) => {
+        if (!s.id || seen.has(s.id)) return;
+        seen.add(s.id);
+        list.push({
+          id: s.id,
+          gid: s.gid || "0",
+          title: s.title || "自訂試算表",
+        });
+      });
+      return list;
+    }
+
+    function sheetOptionValue(sheet) {
+      return sheet.id + "::" + (sheet.gid || "0");
+    }
+
+    function parseSheetOptionValue(val) {
+      if (!val || val === ADD_OPTION_VALUE) return null;
+      const parts = String(val).split("::");
+      return { id: parts[0], gid: parts[1] || "0" };
+    }
+
+    function rebuildSheetSelect(selectId, selectGid) {
+      const prev = sheetSelect.value;
+      const sheets = getKnownSheets();
+      sheetSelect.innerHTML = "";
+      sheets.forEach((s) => {
+        const opt = document.createElement("option");
+        opt.value = sheetOptionValue(s);
+        opt.textContent = s.title || s.id;
+        sheetSelect.appendChild(opt);
+      });
+      const addOpt = document.createElement("option");
+      addOpt.value = ADD_OPTION_VALUE;
+      addOpt.textContent = "＋ 新增試算表";
+      sheetSelect.appendChild(addOpt);
+
+      const want = selectId
+        ? sheetOptionValue({ id: selectId, gid: selectGid || "0" })
+        : prev;
+      if (want && [...sheetSelect.options].some((o) => o.value === want)) {
+        sheetSelect.value = want;
+      } else if (sheets.length) {
+        sheetSelect.value = sheetOptionValue(sheets[0]);
+      }
+    }
+
+    async function fetchSheetFileName(sheetId) {
+      const editUrl = "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(sheetId) + "/edit";
+      const candidates = [
+        "https://api.allorigins.win/raw?url=" + encodeURIComponent(editUrl),
+        editUrl,
+      ];
+      for (const url of candidates) {
+        try {
+          const resp = await fetch(url, { cache: "no-store" });
+          if (!resp.ok) continue;
+          const html = await resp.text();
+          const m = html.match(/<title>([^<]+)<\/title>/i);
+          if (!m) continue;
+          const title = m[1].replace(/\s*-\s*Google\s*Sheets\s*$/i, "").trim();
+          if (title) return title;
+        } catch (_) {}
+      }
+      return "";
+    }
+
+    async function upsertAddedSheet(sheetId, gid, titleHint) {
+      const list = readAddedSheets().filter((s) => s.id !== sheetId);
+      let title = (titleHint || "").trim();
+      if (!title) title = await fetchSheetFileName(sheetId);
+      if (!title) title = "自訂試算表";
+      if (sheetId === DEFAULT_SHEET.id) {
+        DEFAULT_SHEET.title = title;
+        DEFAULT_SHEET.gid = gid || "0";
+      } else {
+        list.push({ id: sheetId, gid: gid || "0", title });
+        writeAddedSheets(list);
+      }
+      rebuildSheetSelect(sheetId, gid || "0");
+      return title;
+    }
 
     function getQueryParams() {
       const out = {};
@@ -612,13 +714,19 @@
         sourceTag.hidden = true;
         return;
       }
-      const preset = sheetSelect.querySelector(`option[value="${currentSheetId}"]`);
-      const name = preset && preset.value !== "__custom__" ? preset.textContent : "自訂試算表";
+      const want = sheetOptionValue({ id: currentSheetId, gid: currentGid });
+      const opt = [...sheetSelect.options].find((o) => o.value === want);
+      const name = (opt && opt.textContent) || currentSheetId;
       sourceTag.textContent = `目前內容：${name}`;
       sourceTag.hidden = false;
     }
 
-    async function loadSheetById(sheetId, gid, lessonOneBased) {
+    function openCustomSheetPanel() {
+      const panel = document.getElementById("customSheetPanel");
+      if (panel) panel.hidden = false;
+    }
+
+    async function loadSheetById(sheetId, gid, lessonOneBased, titleHint) {
       currentSheetId = sheetId;
       currentGid = gid || "0";
       pendingLessonIndex = Math.max(0, (parseInt(lessonOneBased, 10) || 1) - 1);
@@ -628,16 +736,15 @@
         allLessons = buildLessonsFromRows(rows);
         if (!Object.keys(allLessons).length) throw new Error("empty lessons");
 
-        const presetOpt = sheetSelect.querySelector(`option[value="${currentSheetId}"]`);
-        if (presetOpt) {
-          sheetSelect.value = currentSheetId;
-          if (customSheetOption) customSheetOption.hidden = true;
-        } else {
-          if (customSheetOption) {
-            customSheetOption.hidden = false;
-            customSheetOption.textContent = "自訂試算表";
-          }
-          sheetSelect.value = "__custom__";
+        await upsertAddedSheet(currentSheetId, currentGid, titleHint);
+        // 預設表也更新檔名（若抓得到）
+        if (currentSheetId === DEFAULT_SHEET.id && !titleHint) {
+          fetchSheetFileName(currentSheetId).then((name) => {
+            if (!name) return;
+            DEFAULT_SHEET.title = name;
+            rebuildSheetSelect(currentSheetId, currentGid);
+            updateSourceTag();
+          });
         }
         updateSourceTag();
         populateLessons();
@@ -650,14 +757,25 @@
 
     function onPresetSheetChange() {
       const val = sheetSelect.value;
-      if (!val || val === "__custom__") return;
-      // 切換預設書單時清掉網址參數，避免重新整理又跳回自訂表
+      if (val === ADD_OPTION_VALUE) {
+        // 回到目前已載入的選項，並開啟新增說明
+        if (currentSheetId) {
+          rebuildSheetSelect(currentSheetId, currentGid);
+        } else {
+          rebuildSheetSelect(DEFAULT_SHEET.id, DEFAULT_SHEET.gid);
+        }
+        openCustomSheetPanel();
+        return;
+      }
+      const parsed = parseSheetOptionValue(val);
+      if (!parsed) return;
       if (window.history && window.history.replaceState) {
         const u = new URL(window.location.href);
         u.search = "";
         window.history.replaceState({}, "", u.pathname + u.hash);
       }
-      loadSheetById(val, "0", 1);
+      const known = getKnownSheets().find((s) => s.id === parsed.id && (s.gid || "0") === parsed.gid);
+      loadSheetById(parsed.id, parsed.gid, 1, known && known.title);
     }
 
     function populateLessons() {
@@ -688,6 +806,7 @@
       const openBtn = document.getElementById("btnCustomSheet");
       const closeBtn = document.getElementById("customSheetClose");
       const genBtn = document.getElementById("customSheetGenerate");
+      const addOpenBtn = document.getElementById("customSheetAddOpen");
       const pasteEl = document.getElementById("customSheetUrlInput");
       const lessonEl = document.getElementById("customSheetLesson");
       const errEl = document.getElementById("customSheetErr");
@@ -704,6 +823,23 @@
         if (msg && resultBox) resultBox.hidden = true;
       }
 
+      function parsePaste() {
+        const raw = (pasteEl && pasteEl.value) || "";
+        if (!raw.trim()) {
+          showErr("請貼上試算表網址。");
+          return null;
+        }
+        const sid = extractSheetIdFromPaste(raw);
+        if (!sid) {
+          showErr("無法辨識試算表。請貼上 Google 試算表連結（網址中需有 /spreadsheets/d/…）。");
+          return null;
+        }
+        const gidParsed = extractGidFromUrl(raw) || "0";
+        let lessonNum = parseInt(lessonEl && lessonEl.value ? lessonEl.value : "1", 10);
+        if (isNaN(lessonNum) || lessonNum < 1) lessonNum = 1;
+        return { sid, gidParsed, lessonNum, shareUrl: buildReadingShareUrl(sid, gidParsed, lessonNum) };
+      }
+
       openBtn.addEventListener("click", () => {
         panel.hidden = !panel.hidden;
         showErr("");
@@ -712,22 +848,25 @@
 
       genBtn && genBtn.addEventListener("click", () => {
         showErr("");
-        const raw = (pasteEl && pasteEl.value) || "";
-        if (!raw.trim()) {
-          showErr("請貼上試算表網址。");
-          return;
-        }
-        const sid = extractSheetIdFromPaste(raw);
-        if (!sid) {
-          showErr("無法辨識試算表。請貼上 Google 試算表連結（網址中需有 /spreadsheets/d/…）。");
-          return;
-        }
-        const gidParsed = extractGidFromUrl(raw) || "0";
-        let lessonNum = parseInt(lessonEl && lessonEl.value ? lessonEl.value : "1", 10);
-        if (isNaN(lessonNum) || lessonNum < 1) lessonNum = 1;
-        const shareUrl = buildReadingShareUrl(sid, gidParsed, lessonNum);
-        if (outEl) outEl.value = shareUrl;
+        const parsed = parsePaste();
+        if (!parsed) return;
+        if (outEl) outEl.value = parsed.shareUrl;
         if (resultBox) resultBox.hidden = false;
+      });
+
+      addOpenBtn && addOpenBtn.addEventListener("click", async () => {
+        showErr("");
+        const parsed = parsePaste();
+        if (!parsed) return;
+        if (outEl) outEl.value = parsed.shareUrl;
+        if (resultBox) resultBox.hidden = false;
+        panel.hidden = true;
+        if (window.history && window.history.replaceState) {
+          const u = new URL(parsed.shareUrl);
+          window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+        }
+        const title = await fetchSheetFileName(parsed.sid);
+        await loadSheetById(parsed.sid, parsed.gidParsed, parsed.lessonNum, title);
       });
 
       copyBtn && copyBtn.addEventListener("click", () => {
@@ -1305,14 +1444,14 @@ function playAudio() {
 
     initCustomSheetPanel();
     loadYoutubeMap();
+    rebuildSheetSelect(DEFAULT_SHEET.id, DEFAULT_SHEET.gid);
 
     (function boot() {
       const params = getQueryParams();
       if (params.sheet_id) {
         loadSheetById(params.sheet_id, params.gid || "0", params.lesson || "1");
       } else {
-        const preset = sheetSelect.value || "13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0";
-        loadSheetById(preset, "0", 1);
+        loadSheetById(DEFAULT_SHEET.id, DEFAULT_SHEET.gid, 1, DEFAULT_SHEET.title);
       }
     })();
   </script>
