@@ -434,8 +434,9 @@
   </div>
 
   <script>
-    let allLessons = {};
-    let lessonTitles = [];
+    let allLessons = {}; // 課名 -> 句子陣列（已載入的課）
+    let lessonTitles = []; // 課名（依欄位順序）
+    let lessonColIndexes = []; // 與 lessonTitles 對應的欄位 index（0=A）
     let sentences = [];
     let current = 0;
     let sequence = [];
@@ -446,6 +447,7 @@
     let currentSheetId = "";
     let currentGid = "0";
     let pendingLessonIndex = 0; // 0-based
+    let lessonLoadSeq = 0;
     const DEFAULT_SHEET = {
       id: "13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0",
       gid: "0",
@@ -679,24 +681,40 @@
       return u.toString();
     }
 
-    function buildLessonsFromRows(rows) {
-      const lessons = {};
-      if (!rows || !rows.length) return lessons;
-      const headers = rows[0] || [];
-      for (let col = 0; col < headers.length; col++) {
-        const title = String(headers[col] || "").trim();
-        if (!title) continue;
-        const content = [];
-        for (let row = 1; row < rows.length; row++) {
-          const cell = String((rows[row] && rows[row][col]) || "").trim();
-          if (cell) content.push(cell);
-        }
-        if (content.length) lessons[title] = content;
+    function colIndexToLetter(index) {
+      let n = index + 1;
+      let s = "";
+      while (n > 0) {
+        const rem = (n - 1) % 26;
+        s = String.fromCharCode(65 + rem) + s;
+        n = Math.floor((n - 1) / 26);
       }
-      return lessons;
+      return s;
     }
 
-    function fetchLessonSheetViaGvizJsonp(sheetId, gid) {
+    function gvizCellText(cell) {
+      if (!cell) return "";
+      if (cell.f != null && String(cell.f) !== "") return String(cell.f);
+      if (cell.v == null) return "";
+      return String(cell.v);
+    }
+
+    function tablePayloadToRows(payload) {
+      if (!payload || payload.status === "error") throw new Error("gviz error");
+      const table = payload.table || {};
+      const cols = table.cols || [];
+      const labels = cols.map((c) => String((c && c.label) || "").trim());
+      const hasRealLabels = labels.some((l) => l && !/^[A-Z]{1,3}$/.test(l));
+      const body = (table.rows || []).map((row) => {
+        const cells = row.c || [];
+        const out = [];
+        for (let i = 0; i < cols.length; i++) out.push(gvizCellText(cells[i]));
+        return out;
+      });
+      return hasRealLabels ? [labels].concat(body) : body;
+    }
+
+    function fetchLessonSheetViaGvizJsonp(sheetId, gid, tq) {
       return new Promise((resolve, reject) => {
         const cbName = "__readingSheetCb_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
         const script = document.createElement("script");
@@ -713,32 +731,13 @@
         }
         window[cbName] = (payload) => {
           try {
-            if (!payload || payload.status === "error") {
-              finish(new Error("gviz error"));
-              return;
-            }
-            const table = payload.table || {};
-            const cols = table.cols || [];
-            const labels = cols.map((c) => String((c && c.label) || "").trim());
-            // 若沒有真正的欄位標題，第 1 列資料就是 A1/B1/C1（課名）
-            const hasRealLabels = labels.some((l) => l && !/^[A-Z]{1,3}$/.test(l));
-            const body = (table.rows || []).map((row) => {
-              const cells = row.c || [];
-              const out = [];
-              for (let i = 0; i < cols.length; i++) {
-                const cell = cells[i];
-                if (!cell) { out.push(""); continue; }
-                out.push(cell.f != null && String(cell.f) !== "" ? String(cell.f) : (cell.v == null ? "" : String(cell.v)));
-              }
-              return out;
-            });
-            finish(null, hasRealLabels ? [labels].concat(body) : body);
+            finish(null, tablePayloadToRows(payload));
           } catch (e) {
             finish(e);
           }
         };
         script.onerror = () => finish(new Error("gviz script load failed"));
-        script.src =
+        let src =
           "https://docs.google.com/spreadsheets/d/" +
           encodeURIComponent(sheetId) +
           "/gviz/tq?tqx=responseHandler:" +
@@ -747,38 +746,89 @@
           encodeURIComponent(gid || "0") +
           "&t=" +
           Date.now();
+        if (tq) src += "&tq=" + encodeURIComponent(tq);
+        script.src = src;
         document.head.appendChild(script);
       });
     }
 
-    async function fetchLessonSheetRows(sheetId, gid) {
-      try {
-        return await fetchLessonSheetViaGvizJsonp(sheetId, gid || "0");
-      } catch (_) {}
-      const exportUrl =
-        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid || "0"}`;
-      const gvizUrl =
-        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid || "0"}`;
-      const candidates = [
-        exportUrl,
-        gvizUrl,
-        "https://api.allorigins.win/raw?url=" + encodeURIComponent(gvizUrl),
-        "https://api.allorigins.win/raw?url=" + encodeURIComponent(exportUrl),
-      ];
-      let lastErr = null;
-      for (const url of candidates) {
-        try {
-          const resp = await fetch(url, { cache: "no-store" });
-          if (!resp.ok) throw new Error("HTTP " + resp.status);
-          const text = await resp.text();
-          const t = (text || "").trim();
-          if (!t || t.startsWith("<") || t.startsWith("{")) throw new Error("invalid csv");
-          return parseSimpleCsv(text);
-        } catch (err) {
-          lastErr = err;
-        }
+    function applyLessonHeaders(headerRow) {
+      lessonTitles = [];
+      lessonColIndexes = [];
+      allLessons = {};
+      (headerRow || []).forEach((cell, col) => {
+        const title = String(cell || "").trim();
+        if (!title) return;
+        lessonTitles.push(title);
+        lessonColIndexes.push(col);
+      });
+    }
+
+    function applyLessonColumn(colIndex, rows, titleHint) {
+      const values = (rows || []).map((r) => String((r && r[0]) || "").trim());
+      let title = (titleHint || "").trim();
+      let content = values;
+      if (!title && values.length) {
+        title = values[0];
+        content = values.slice(1);
       }
-      throw lastErr || new Error("unable to fetch lesson sheet");
+      content = content.filter(Boolean);
+      if (!title) return null;
+      // 對齊 headers 裡的課名
+      const idx = lessonColIndexes.indexOf(colIndex);
+      if (idx >= 0 && lessonTitles[idx]) title = lessonTitles[idx];
+      allLessons[title] = content;
+      return title;
+    }
+
+    async function fetchLessonColumn(sheetId, gid, colIndex) {
+      const letter = colIndexToLetter(colIndex);
+      return fetchLessonSheetViaGvizJsonp(sheetId, gid, "select " + letter);
+    }
+
+    async function ensureLessonLoaded(lessonIndex) {
+      const title = lessonTitles[lessonIndex];
+      const colIndex = lessonColIndexes[lessonIndex];
+      if (!title || colIndex == null) return false;
+      if (Array.isArray(allLessons[title])) return true;
+      const seq = ++lessonLoadSeq;
+      sentenceIndexContainer.textContent = "載入課次中…";
+      const rows = await fetchLessonColumn(currentSheetId, currentGid, colIndex);
+      if (seq !== lessonLoadSeq) return false;
+      applyLessonColumn(colIndex, rows, title);
+      return true;
+    }
+
+    function scheduleBackgroundLessonPrefetch(preferIndex) {
+      // 首屏完成後再慢慢預載其他課，不阻擋第一次開啟
+      const order = [];
+      if (preferIndex > 0) order.push(preferIndex - 1);
+      if (preferIndex + 1 < lessonTitles.length) order.push(preferIndex + 1);
+      for (let i = 0; i < lessonTitles.length; i++) {
+        if (i !== preferIndex && !order.includes(i)) order.push(i);
+      }
+      let n = 0;
+      const tick = () => {
+        if (n >= order.length) return;
+        if (currentSheetId === "") return;
+        const idx = order[n++];
+        const title = lessonTitles[idx];
+        if (!title || Array.isArray(allLessons[title])) {
+          setTimeout(tick, 50);
+          return;
+        }
+        const colIndex = lessonColIndexes[idx];
+        const sheetId = currentSheetId;
+        const gid = currentGid;
+        fetchLessonColumn(sheetId, gid, colIndex)
+          .then((rows) => {
+            if (sheetId !== currentSheetId || gid !== currentGid) return;
+            applyLessonColumn(colIndex, rows, title);
+          })
+          .catch(() => {})
+          .finally(() => setTimeout(tick, 200));
+      };
+      setTimeout(tick, 800);
     }
 
     function updateSourceTag() {
@@ -807,6 +857,9 @@
       currentSheetId = sheetId;
       currentGid = gidNorm;
       pendingLessonIndex = Math.max(0, (parseInt(lessonOneBased, 10) || 1) - 1);
+      allLessons = {};
+      lessonTitles = [];
+      lessonColIndexes = [];
 
       // 先立刻切換選單顯示，避免仍停在「國語一上」
       rebuildSheetSelect(sheetId, gidNorm);
@@ -814,15 +867,25 @@
       sentenceIndexContainer.textContent = "載入試算表中…";
 
       try {
-        const rows = await fetchLessonSheetRows(sheetId, gidNorm);
-        if (seq !== loadSeq) return; // 已切換到別的表，忽略過期結果
-        allLessons = buildLessonsFromRows(rows);
-        if (!Object.keys(allLessons).length) throw new Error("empty lessons");
+        // 1) 只抓第 1 列課名（很小）  2) 只抓目前課次那一欄
+        const headerRows = await fetchLessonSheetViaGvizJsonp(
+          sheetId,
+          gidNorm,
+          "select * limit 1"
+        );
+        if (seq !== loadSeq) return;
+        applyLessonHeaders(headerRows[0] || []);
+        if (!lessonTitles.length) throw new Error("empty lessons");
+
+        const lessonIdx = Math.min(pendingLessonIndex, lessonTitles.length - 1);
+        const colIndex = lessonColIndexes[lessonIdx];
+        const colRows = await fetchLessonColumn(sheetId, gidNorm, colIndex);
+        if (seq !== loadSeq) return;
+        applyLessonColumn(colIndex, colRows, lessonTitles[lessonIdx]);
 
         await upsertAddedSheet(sheetId, gidNorm, titleHint);
         if (seq !== loadSeq) return;
 
-        // 背景再確認標籤；用載入當下的 id/gid，避免被後來的切換覆蓋錯
         fetchSheetDisplayName(sheetId, gidNorm).then((name) => {
           if (!name || seq !== loadSeq) return;
           const isDefault =
@@ -846,7 +909,9 @@
           updateSourceTag();
         });
         updateSourceTag();
+        pendingLessonIndex = lessonIdx;
         populateLessons();
+        scheduleBackgroundLessonPrefetch(lessonIdx);
       } catch (err) {
         if (seq !== loadSeq) return;
         console.error(err);
@@ -882,7 +947,6 @@
 
     function populateLessons() {
       lessonSelect.innerHTML = "";
-      lessonTitles = Object.keys(allLessons);
       lessonTitles.forEach((title, index) => {
         const option = document.createElement("option");
         option.value = index;
@@ -895,12 +959,27 @@
       changeLesson();
     }
 
-    function changeLesson() {
-      const index = lessonSelect.value;
+    async function changeLesson() {
+      const index = parseInt(lessonSelect.value, 10) || 0;
       const title = lessonTitles[index];
-      sentences = allLessons[title] || [];
-      current = 0;
-      renderSentence();
+      if (!title) {
+        sentences = [];
+        current = 0;
+        renderSentence();
+        return;
+      }
+      try {
+        if (!Array.isArray(allLessons[title])) {
+          await ensureLessonLoaded(index);
+        }
+        sentences = allLessons[title] || [];
+        current = 0;
+        renderSentence();
+      } catch (err) {
+        console.error(err);
+        sentenceIndexContainer.textContent = "此課次載入失敗，請稍後再試。";
+        sentenceContainer.innerHTML = "";
+      }
     }
 
     function initCustomSheetPanel() {
