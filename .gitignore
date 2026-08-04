@@ -1,0 +1,29 @@
+# 忽略圖片檔案（檔案太大，不需要上傳到 GitHub）
+*.JPEG
+*.jpeg
+*.JPG
+*.jpg
+*.PNG
+*.png
+*.GIF
+*.gif
+
+# 忽略系統檔案
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 忽略編輯器檔案
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# 忽略臨時檔案
+*.tmp
+*.log
