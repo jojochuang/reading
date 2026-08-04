@@ -203,8 +203,138 @@
       margin-top: 1rem;
     }
     .char.has-stroke {
-  background: #fffacd; /* 淡黃色代表有筆順圖 */
-}
+      background: #fffacd; /* 淡黃色代表有筆順圖 */
+    }
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0.75rem 0;
+    }
+    .top-bar select {
+      margin-top: 0;
+      max-width: min(100%, 280px);
+    }
+    .top-bar .btn-custom {
+      font-size: 1.05rem;
+      margin: 0;
+      padding: 0.55rem 1rem;
+      background-color: #5b8def;
+    }
+    .custom-sheet-panel {
+      max-width: 720px;
+      margin: 1rem auto;
+      padding: 1rem 1.15rem 1.25rem;
+      text-align: left;
+      background: #fffdf8;
+      border: 2px solid #f0d9b5;
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .custom-sheet-panel[hidden] {
+      display: none !important;
+    }
+    .custom-sheet-panel h2 {
+      margin: 0 0 0.6rem;
+      font-size: 1.25rem;
+      color: #5a3d1a;
+    }
+    .custom-sheet-panel ol {
+      margin: 0 0 0.85rem;
+      padding-left: 1.3rem;
+      color: #444;
+      line-height: 1.55;
+      font-size: 0.98rem;
+    }
+    .custom-sheet-panel a {
+      color: #1a5fb4;
+    }
+    .custom-sheet-format {
+      margin: 0 0 0.9rem;
+      padding: 0.7rem 0.85rem;
+      background: #fff7eb;
+      border-radius: 10px;
+      font-size: 0.92rem;
+      color: #4a3720;
+      line-height: 1.5;
+    }
+    .custom-sheet-format code {
+      background: #f3e6d0;
+      padding: 0.05em 0.35em;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .custom-sheet-row {
+      margin-bottom: 0.7rem;
+    }
+    .custom-sheet-row label {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: 600;
+      color: #5a3d1a;
+      font-size: 0.95rem;
+    }
+    .custom-sheet-row textarea,
+    .custom-sheet-row input[type="text"],
+    .custom-sheet-row input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 1rem;
+      padding: 0.55rem 0.7rem;
+      border: 1.5px solid #e0c49a;
+      border-radius: 8px;
+      font-family: inherit;
+    }
+    .custom-sheet-row textarea {
+      min-height: 4.2rem;
+      resize: vertical;
+    }
+    .custom-sheet-hint {
+      margin: 0.2rem 0 0.8rem;
+      font-size: 0.88rem;
+      color: #777;
+    }
+    .custom-sheet-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      align-items: center;
+    }
+    .custom-sheet-actions button {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+    .custom-sheet-err {
+      margin-top: 0.65rem;
+      color: #b00020;
+      font-size: 0.95rem;
+    }
+    .custom-sheet-result {
+      margin-top: 0.85rem;
+      padding-top: 0.75rem;
+      border-top: 1px dashed #e0c49a;
+    }
+    .custom-sheet-result input {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 0.95rem;
+      padding: 0.55rem 0.7rem;
+      border: 1.5px solid #8bc34a;
+      border-radius: 8px;
+      background: #f4fff0;
+      margin: 0.35rem 0 0.55rem;
+    }
+    .source-tag {
+      display: inline-block;
+      margin-top: 0.4rem;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      background: #eef5ff;
+      color: #335;
+      font-size: 0.85rem;
+    }
   </style>
   <script src="strokeMap.js?v=20250203"></script>
   <script>
@@ -236,13 +366,62 @@
   </script>
 </head>
 <body>
-  <select id="sheet-select" onchange="loadSheet()">
-    <option value="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/export?format=csv">南一國語一上</option>
-    <option value="https://docs.google.com/spreadsheets/d/16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA/export?format=csv">生活華語1</option>
-    <option value="https://docs.google.com/spreadsheets/d/16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs/export?format=csv">生活華語2</option>
-    <option value="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/export?format=csv">認字</option>
-  </select>
-  <select id="lesson-select" onchange="changeLesson()"></select>
+  <div class="top-bar">
+    <select id="sheet-select" onchange="onPresetSheetChange()">
+      <option value="13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0">南一國語一上</option>
+      <option value="16I3XgeJLkoNGgQ2WNirkOnNMB_7XzUkt5ZgQkalnXUA">生活華語1</option>
+      <option value="16rrma_hRQGhR2U-UNKHvPbSCl2PFREaKhpGEW4IWWNs">生活華語2</option>
+      <option value="18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM">認字</option>
+      <option value="__custom__" id="customSheetOption" hidden>自訂試算表</option>
+    </select>
+    <select id="lesson-select" onchange="changeLesson()"></select>
+    <button type="button" class="btn-custom" id="btnCustomSheet">自製認字清單</button>
+  </div>
+  <div class="source-tag" id="sourceTag" hidden></div>
+
+  <div class="custom-sheet-panel" id="customSheetPanel" hidden>
+    <h2>自製上課認字清單／課文</h2>
+    <ol>
+      <li>開啟
+        <a href="https://docs.google.com/spreadsheets/d/18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM/edit" target="_blank" rel="noopener noreferrer">試算表範本（認字）</a>
+        或
+        <a href="https://docs.google.com/spreadsheets/d/13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0/edit" target="_blank" rel="noopener noreferrer">課文句子範例（南一國語一上）</a>，
+        使用「檔案 → 建立副本」複製到自己的雲端硬碟。
+      </li>
+      <li>依下方格式編輯自己的課名與內容。</li>
+      <li>將副本設為<strong>知道連結的使用者可檢視</strong>（共用 → 一般存取權）。</li>
+      <li>複製瀏覽器網址列的完整試算表網址，貼在下方，按「產生上課連結」。</li>
+      <li>把產生的連結分享給學生，或按「開啟」直接上課。</li>
+    </ol>
+    <div class="custom-sheet-format">
+      <strong>試算表格式</strong><br>
+      • 第 1 列：每一欄一個課名（例如 <code>第一課</code>、<code>第二課</code>）<br>
+      • 第 2 列起：該課的內容，一格一則（可以是詞／字串，也可以是完整句子）<br>
+      • 可依需要新增欄位（新課）或列（更多詞句）
+    </div>
+    <div class="custom-sheet-row">
+      <label for="customSheetUrlInput">貼上你的試算表網址</label>
+      <textarea id="customSheetUrlInput" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off" spellcheck="false"></textarea>
+    </div>
+    <div class="custom-sheet-row">
+      <label for="customSheetLesson">預設開啟第幾課（依欄位順序，從 1 起算）</label>
+      <input type="number" id="customSheetLesson" min="1" value="1" />
+    </div>
+    <p class="custom-sheet-hint">若網址中沒有 gid，會使用第一個工作表（gid=0）。</p>
+    <div class="custom-sheet-actions">
+      <button type="button" id="customSheetGenerate">產生上課連結</button>
+      <button type="button" id="customSheetClose" style="background:#bbb;">關閉說明</button>
+    </div>
+    <div id="customSheetErr" class="custom-sheet-err" hidden></div>
+    <div id="customSheetResult" class="custom-sheet-result" hidden>
+      <label for="customSheetOutput"><strong>你的上課連結</strong></label>
+      <input type="text" id="customSheetOutput" readonly />
+      <div class="custom-sheet-actions">
+        <button type="button" id="customSheetCopy">複製連結</button>
+        <button type="button" id="customSheetOpen" style="background:#5b8def;">開啟</button>
+      </div>
+    </div>
+  </div>
 
   <div class="sentence-index" id="sentence-index"></div>
   <div class="sentence" id="sentence"></div>
@@ -271,6 +450,9 @@
     // 圖片預載快取
     let imageCache = new Map();
     let preloadPromises = [];
+    let currentSheetId = "";
+    let currentGid = "0";
+    let pendingLessonIndex = 0; // 0-based
 
     const sheetSelect = document.getElementById("sheet-select");
     const lessonSelect = document.getElementById("lesson-select");
@@ -279,30 +461,207 @@
     const endIndicator = document.getElementById("end-indicator");
     const fullscreenView = document.getElementById("fullscreen-view");
     const fullscreenImg = document.getElementById("fullscreen-img");
+    const customSheetOption = document.getElementById("customSheetOption");
+    const sourceTag = document.getElementById("sourceTag");
 
-    function loadSheet() {
-      const url = sheetSelect.value;
-      fetch(url)
-        .then(response => response.text())
-        .then(csv => {
-          const lines = csv.split(/\r?\n/).map(line => line.trim());
-          allLessons = {};
-          const headers = lines[0].split(',');
-          for (let col = 0; col < headers.length; col++) {
-            const title = headers[col];
-            const content = [];
-            for (let row = 1; row < lines.length; row++) {
-              const cells = lines[row].split(',');
-              if (cells[col]) content.push(cells[col]);
+    function getQueryParams() {
+      const out = {};
+      const search = window.location.search.substring(1);
+      if (!search) return out;
+      search.split("&").forEach((pair) => {
+        const [k, v] = pair.split("=");
+        if (!k) return;
+        out[decodeURIComponent(k)] = decodeURIComponent(v || "");
+      });
+      return out;
+    }
+
+    function extractSheetIdFromPaste(text) {
+      const t = (text || "").trim();
+      const m = t.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/i);
+      if (m) return m[1];
+      if (/^[a-zA-Z0-9-_]{20,}$/.test(t)) return t;
+      return "";
+    }
+
+    function extractGidFromUrl(url) {
+      if (!url || typeof url !== "string") return "0";
+      const m = url.match(/[?&#]gid=(\d+)/i);
+      return m ? m[1] : "0";
+    }
+
+    function buildReadingShareUrl(sheetIdVal, gidVal, lessonNum) {
+      const q = new URLSearchParams();
+      q.set("sheet_id", sheetIdVal);
+      q.set("gid", gidVal || "0");
+      q.set("lesson", String(lessonNum || 1));
+      const u = new URL(window.location.href);
+      u.search = "";
+      u.hash = "";
+      if (u.pathname.endsWith("/")) u.pathname += "index.html";
+      else if (!/index\.html$/i.test(u.pathname) && !u.pathname.includes(".")) {
+        // GitHub Pages project path without trailing slash
+      }
+      u.search = q.toString();
+      return u.toString();
+    }
+
+    function buildLessonsFromRows(rows) {
+      const lessons = {};
+      if (!rows || !rows.length) return lessons;
+      const headers = rows[0] || [];
+      for (let col = 0; col < headers.length; col++) {
+        const title = String(headers[col] || "").trim();
+        if (!title) continue;
+        const content = [];
+        for (let row = 1; row < rows.length; row++) {
+          const cell = String((rows[row] && rows[row][col]) || "").trim();
+          if (cell) content.push(cell);
+        }
+        if (content.length) lessons[title] = content;
+      }
+      return lessons;
+    }
+
+    function fetchLessonSheetViaGvizJsonp(sheetId, gid) {
+      return new Promise((resolve, reject) => {
+        const cbName = "__readingSheetCb_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
+        const script = document.createElement("script");
+        let done = false;
+        const timer = setTimeout(() => finish(new Error("gviz timeout")), 25000);
+        function finish(err, rows) {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+          if (script.parentNode) script.parentNode.removeChild(script);
+          if (err) reject(err);
+          else resolve(rows);
+        }
+        window[cbName] = (payload) => {
+          try {
+            if (!payload || payload.status === "error") {
+              finish(new Error("gviz error"));
+              return;
             }
-            if (title) allLessons[title] = content;
+            const table = payload.table || {};
+            const cols = table.cols || [];
+            const header = cols.map((c) => (c && (c.label || c.id)) || "");
+            const body = (table.rows || []).map((row) => {
+              const cells = row.c || [];
+              const out = [];
+              for (let i = 0; i < cols.length; i++) {
+                const cell = cells[i];
+                if (!cell) { out.push(""); continue; }
+                out.push(cell.f != null && String(cell.f) !== "" ? String(cell.f) : (cell.v == null ? "" : String(cell.v)));
+              }
+              return out;
+            });
+            finish(null, [header].concat(body));
+          } catch (e) {
+            finish(e);
           }
-          populateLessons();
-        });
+        };
+        script.onerror = () => finish(new Error("gviz script load failed"));
+        script.src =
+          "https://docs.google.com/spreadsheets/d/" +
+          encodeURIComponent(sheetId) +
+          "/gviz/tq?tqx=responseHandler:" +
+          cbName +
+          ";out:json&gid=" +
+          encodeURIComponent(gid || "0") +
+          "&t=" +
+          Date.now();
+        document.head.appendChild(script);
+      });
+    }
+
+    async function fetchLessonSheetRows(sheetId, gid) {
+      try {
+        return await fetchLessonSheetViaGvizJsonp(sheetId, gid || "0");
+      } catch (_) {}
+      const exportUrl =
+        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid || "0"}`;
+      const gvizUrl =
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid || "0"}`;
+      const candidates = [
+        exportUrl,
+        gvizUrl,
+        "https://api.allorigins.win/raw?url=" + encodeURIComponent(gvizUrl),
+        "https://api.allorigins.win/raw?url=" + encodeURIComponent(exportUrl),
+      ];
+      let lastErr = null;
+      for (const url of candidates) {
+        try {
+          const resp = await fetch(url, { cache: "no-store" });
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          const text = await resp.text();
+          const t = (text || "").trim();
+          if (!t || t.startsWith("<") || t.startsWith("{")) throw new Error("invalid csv");
+          return parseSimpleCsv(text);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("unable to fetch lesson sheet");
+    }
+
+    function updateSourceTag() {
+      if (!sourceTag) return;
+      if (!currentSheetId) {
+        sourceTag.hidden = true;
+        return;
+      }
+      const preset = sheetSelect.querySelector(`option[value="${currentSheetId}"]`);
+      const name = preset && preset.value !== "__custom__" ? preset.textContent : "自訂試算表";
+      sourceTag.textContent = `目前內容：${name}`;
+      sourceTag.hidden = false;
+    }
+
+    async function loadSheetById(sheetId, gid, lessonOneBased) {
+      currentSheetId = sheetId;
+      currentGid = gid || "0";
+      pendingLessonIndex = Math.max(0, (parseInt(lessonOneBased, 10) || 1) - 1);
+      sentenceIndexContainer.textContent = "載入試算表中…";
+      try {
+        const rows = await fetchLessonSheetRows(currentSheetId, currentGid);
+        allLessons = buildLessonsFromRows(rows);
+        if (!Object.keys(allLessons).length) throw new Error("empty lessons");
+
+        const presetOpt = sheetSelect.querySelector(`option[value="${currentSheetId}"]`);
+        if (presetOpt) {
+          sheetSelect.value = currentSheetId;
+          if (customSheetOption) customSheetOption.hidden = true;
+        } else {
+          if (customSheetOption) {
+            customSheetOption.hidden = false;
+            customSheetOption.textContent = "自訂試算表";
+          }
+          sheetSelect.value = "__custom__";
+        }
+        updateSourceTag();
+        populateLessons();
+      } catch (err) {
+        console.error(err);
+        sentenceIndexContainer.textContent = "試算表載入失敗：請確認已設為「知道連結的任何人可檢視」。";
+        sentenceContainer.innerHTML = "";
+      }
+    }
+
+    function onPresetSheetChange() {
+      const val = sheetSelect.value;
+      if (!val || val === "__custom__") return;
+      // 切換預設書單時清掉網址參數，避免重新整理又跳回自訂表
+      if (window.history && window.history.replaceState) {
+        const u = new URL(window.location.href);
+        u.search = "";
+        window.history.replaceState({}, "", u.pathname + u.hash);
+      }
+      loadSheetById(val, "0", 1);
     }
 
     function populateLessons() {
-      lessonSelect.innerHTML = '';
+      lessonSelect.innerHTML = "";
       lessonTitles = Object.keys(allLessons);
       lessonTitles.forEach((title, index) => {
         const option = document.createElement("option");
@@ -310,15 +669,86 @@
         option.textContent = title;
         lessonSelect.appendChild(option);
       });
+      const idx = Math.min(pendingLessonIndex, Math.max(0, lessonTitles.length - 1));
+      lessonSelect.value = String(idx);
+      pendingLessonIndex = 0;
       changeLesson();
     }
 
     function changeLesson() {
       const index = lessonSelect.value;
       const title = lessonTitles[index];
-      sentences = allLessons[title];
+      sentences = allLessons[title] || [];
       current = 0;
       renderSentence();
+    }
+
+    function initCustomSheetPanel() {
+      const panel = document.getElementById("customSheetPanel");
+      const openBtn = document.getElementById("btnCustomSheet");
+      const closeBtn = document.getElementById("customSheetClose");
+      const genBtn = document.getElementById("customSheetGenerate");
+      const pasteEl = document.getElementById("customSheetUrlInput");
+      const lessonEl = document.getElementById("customSheetLesson");
+      const errEl = document.getElementById("customSheetErr");
+      const resultBox = document.getElementById("customSheetResult");
+      const outEl = document.getElementById("customSheetOutput");
+      const copyBtn = document.getElementById("customSheetCopy");
+      const openLinkBtn = document.getElementById("customSheetOpen");
+      if (!panel || !openBtn) return;
+
+      function showErr(msg) {
+        if (!errEl) return;
+        errEl.hidden = !msg;
+        errEl.textContent = msg || "";
+        if (msg && resultBox) resultBox.hidden = true;
+      }
+
+      openBtn.addEventListener("click", () => {
+        panel.hidden = !panel.hidden;
+        showErr("");
+      });
+      closeBtn && closeBtn.addEventListener("click", () => { panel.hidden = true; });
+
+      genBtn && genBtn.addEventListener("click", () => {
+        showErr("");
+        const raw = (pasteEl && pasteEl.value) || "";
+        if (!raw.trim()) {
+          showErr("請貼上試算表網址。");
+          return;
+        }
+        const sid = extractSheetIdFromPaste(raw);
+        if (!sid) {
+          showErr("無法辨識試算表。請貼上 Google 試算表連結（網址中需有 /spreadsheets/d/…）。");
+          return;
+        }
+        const gidParsed = extractGidFromUrl(raw) || "0";
+        let lessonNum = parseInt(lessonEl && lessonEl.value ? lessonEl.value : "1", 10);
+        if (isNaN(lessonNum) || lessonNum < 1) lessonNum = 1;
+        const shareUrl = buildReadingShareUrl(sid, gidParsed, lessonNum);
+        if (outEl) outEl.value = shareUrl;
+        if (resultBox) resultBox.hidden = false;
+      });
+
+      copyBtn && copyBtn.addEventListener("click", () => {
+        const text = (outEl && outEl.value) || "";
+        if (!text) return;
+        const done = () => { copyBtn.textContent = "已複製"; setTimeout(() => { copyBtn.textContent = "複製連結"; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(() => {
+            outEl.select();
+            try { document.execCommand("copy"); done(); } catch (_) {}
+          });
+        } else {
+          outEl.select();
+          try { document.execCommand("copy"); done(); } catch (_) {}
+        }
+      });
+
+      openLinkBtn && openLinkBtn.addEventListener("click", () => {
+        const text = (outEl && outEl.value) || "";
+        if (text) window.location.href = text;
+      });
     }
 
     const dictImageCache = new Map(); // char -> true | false | pending Promise
@@ -873,8 +1303,18 @@ function playAudio() {
       renderSentence();
     }
 
+    initCustomSheetPanel();
     loadYoutubeMap();
-    loadSheet();
+
+    (function boot() {
+      const params = getQueryParams();
+      if (params.sheet_id) {
+        loadSheetById(params.sheet_id, params.gid || "0", params.lesson || "1");
+      } else {
+        const preset = sheetSelect.value || "13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0";
+        loadSheetById(preset, "0", 1);
+      }
+    })();
   </script>
 </body>
 </html>
