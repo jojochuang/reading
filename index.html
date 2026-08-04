@@ -449,7 +449,7 @@
     const DEFAULT_SHEET = {
       id: "13w2nNN8W5Xy7kcS_sLyhT0V4FLxbAF9A9q0idiGgnM0",
       gid: "0",
-      title: "國語一上", // 試算表檔名
+      title: "國語一上｜一上", // 檔名｜分頁名
     };
     const ADDED_SHEETS_KEY = "reading_added_sheets_v1";
     const ADD_OPTION_VALUE = "__add__";
@@ -487,7 +487,7 @@
         list.push({
           id: s.id,
           gid: s.gid || "0",
-          title: s.title || "自訂試算表",
+          title: cleanDocTitle(s.title) || "自訂試算表",
         });
       });
       return list;
@@ -528,32 +528,76 @@
       }
     }
 
-    async function fetchSheetFileName(sheetId) {
-      const editUrl = "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(sheetId) + "/edit";
+    function cleanDocTitle(raw) {
+      return String(raw || "")
+        .replace(/\s*-\s*Google\s*Sheets\s*$/i, "")
+        .replace(/\s*-\s*Google\s*試算表\s*$/i, "")
+        .replace(/Google\s*Sheets/gi, "")
+        .replace(/Google\s*試算表/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    }
+
+    function formatSheetLabel(fileName, tabName) {
+      const file = cleanDocTitle(fileName);
+      const tab = cleanDocTitle(tabName);
+      if (file && tab && file !== tab) return file + "｜" + tab;
+      return file || tab || "";
+    }
+
+    async function fetchSheetDisplayName(sheetId, gid) {
+      const wantGid = String(gid || "0");
+      const htmlviewUrl =
+        "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(sheetId) + "/htmlview";
+      const editUrl =
+        "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(sheetId) + "/edit";
       const candidates = [
+        "https://api.allorigins.win/raw?url=" + encodeURIComponent(htmlviewUrl),
+        htmlviewUrl,
         "https://api.allorigins.win/raw?url=" + encodeURIComponent(editUrl),
         editUrl,
       ];
+      let fileName = "";
+      let tabName = "";
       for (const url of candidates) {
         try {
           const resp = await fetch(url, { cache: "no-store" });
           if (!resp.ok) continue;
           const html = await resp.text();
-          const m = html.match(/<title>([^<]+)<\/title>/i);
-          if (!m) continue;
-          const title = m[1].replace(/\s*-\s*Google\s*Sheets\s*$/i, "").trim();
-          if (title) return title;
+          if (!fileName) {
+            const og = html.match(/property="og:title"\s+content="([^"]+)"/i);
+            const title = html.match(/<title>([^<]+)<\/title>/i);
+            fileName = cleanDocTitle((og && og[1]) || (title && title[1]) || "");
+          }
+          if (!tabName) {
+            const re = /items\.push\(\{name:\s*"([^"]+)",\s*pageUrl:\s*"([^"]+)"/g;
+            let m;
+            const tabs = [];
+            while ((m = re.exec(html))) {
+              const page = m[2].replace(/\\\//g, "/");
+              const gm = page.match(/gid=(-?\d+)/);
+              tabs.push({ name: m[1], gid: gm ? gm[1] : "" });
+            }
+            const hit = tabs.find((t) => t.gid === wantGid);
+            if (hit) tabName = hit.name;
+            else if (tabs.length === 1) tabName = tabs[0].name;
+          }
+          if (fileName && tabName) break;
         } catch (_) {}
       }
-      return "";
+      return formatSheetLabel(fileName, tabName);
     }
 
     async function upsertAddedSheet(sheetId, gid, titleHint) {
-      const list = readAddedSheets().filter((s) => s.id !== sheetId);
-      let title = (titleHint || "").trim();
-      if (!title) title = await fetchSheetFileName(sheetId);
+      const list = readAddedSheets().filter((s) => !(s.id === sheetId && String(s.gid || "0") === String(gid || "0")));
+      let title = cleanDocTitle(titleHint || "");
+      // 若只有檔名、沒有分頁名，再抓一次完整「檔名｜分頁」
+      if (!title || !title.includes("｜")) {
+        const fetched = await fetchSheetDisplayName(sheetId, gid || "0");
+        if (fetched) title = fetched;
+      }
       if (!title) title = "自訂試算表";
-      if (sheetId === DEFAULT_SHEET.id) {
+      if (sheetId === DEFAULT_SHEET.id && String(gid || "0") === String(DEFAULT_SHEET.gid || "0")) {
         DEFAULT_SHEET.title = title;
         DEFAULT_SHEET.gid = gid || "0";
       } else {
@@ -737,15 +781,22 @@
         if (!Object.keys(allLessons).length) throw new Error("empty lessons");
 
         await upsertAddedSheet(currentSheetId, currentGid, titleHint);
-        // 預設表也更新檔名（若抓得到）
-        if (currentSheetId === DEFAULT_SHEET.id && !titleHint) {
-          fetchSheetFileName(currentSheetId).then((name) => {
-            if (!name) return;
+        // 背景再確認一次標籤（檔名｜分頁），避免殘留 Google 字樣或缺分頁名
+        fetchSheetDisplayName(currentSheetId, currentGid).then((name) => {
+          if (!name) return;
+          if (currentSheetId === DEFAULT_SHEET.id && String(currentGid) === String(DEFAULT_SHEET.gid || "0")) {
             DEFAULT_SHEET.title = name;
-            rebuildSheetSelect(currentSheetId, currentGid);
-            updateSourceTag();
-          });
-        }
+          } else {
+            const list = readAddedSheets().map((s) =>
+              s.id === currentSheetId && String(s.gid || "0") === String(currentGid)
+                ? { ...s, title: name }
+                : s
+            );
+            writeAddedSheets(list);
+          }
+          rebuildSheetSelect(currentSheetId, currentGid);
+          updateSourceTag();
+        });
         updateSourceTag();
         populateLessons();
       } catch (err) {
@@ -865,7 +916,7 @@
           const u = new URL(parsed.shareUrl);
           window.history.replaceState({}, "", u.pathname + u.search + u.hash);
         }
-        const title = await fetchSheetFileName(parsed.sid);
+        const title = await fetchSheetDisplayName(parsed.sid, parsed.gidParsed);
         await loadSheetById(parsed.sid, parsed.gidParsed, parsed.lessonNum, title);
       });
 
