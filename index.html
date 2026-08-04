@@ -478,34 +478,58 @@
       } catch (_) {}
     }
 
+    function normalizeGid(gid) {
+      if (gid === 0 || gid === "0") return "0";
+      if (gid == null || gid === "") return "0";
+      return String(gid);
+    }
+
     function getKnownSheets() {
-      const seen = new Set([DEFAULT_SHEET.id]);
-      const list = [DEFAULT_SHEET];
-      readAddedSheets().forEach((s) => {
-        if (!s.id || seen.has(s.id)) return;
-        seen.add(s.id);
-        list.push({
+      // 以 id+gid 去重，同一試算表不同分頁可並存
+      const seen = new Set();
+      const list = [];
+      const pushSheet = (s) => {
+        if (!s || !s.id) return;
+        const item = {
           id: s.id,
-          gid: s.gid || "0",
+          gid: normalizeGid(s.gid),
           title: cleanDocTitle(s.title) || "自訂試算表",
-        });
-      });
+        };
+        const key = sheetOptionValue(item);
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push(item);
+      };
+      pushSheet(DEFAULT_SHEET);
+      readAddedSheets().forEach(pushSheet);
       return list;
     }
 
     function sheetOptionValue(sheet) {
-      return sheet.id + "::" + (sheet.gid || "0");
+      return sheet.id + "::" + normalizeGid(sheet.gid);
     }
 
     function parseSheetOptionValue(val) {
       if (!val || val === ADD_OPTION_VALUE) return null;
       const parts = String(val).split("::");
-      return { id: parts[0], gid: parts[1] || "0" };
+      return { id: parts[0], gid: normalizeGid(parts[1]) };
     }
 
     function rebuildSheetSelect(selectId, selectGid) {
-      const prev = sheetSelect.value;
       const sheets = getKnownSheets();
+      const want = selectId
+        ? sheetOptionValue({ id: selectId, gid: normalizeGid(selectGid) })
+        : "";
+
+      // 若目標不在清單中，先補一筆，避免掉回預設第一項
+      if (want && !sheets.some((s) => sheetOptionValue(s) === want)) {
+        sheets.push({
+          id: selectId,
+          gid: normalizeGid(selectGid),
+          title: "自訂試算表",
+        });
+      }
+
       sheetSelect.innerHTML = "";
       sheets.forEach((s) => {
         const opt = document.createElement("option");
@@ -518,13 +542,13 @@
       addOpt.textContent = "＋ 新增試算表";
       sheetSelect.appendChild(addOpt);
 
-      const want = selectId
-        ? sheetOptionValue({ id: selectId, gid: selectGid || "0" })
-        : prev;
-      if (want && [...sheetSelect.options].some((o) => o.value === want)) {
+      if (want) {
         sheetSelect.value = want;
+        // 部分瀏覽器重建 option 後需再設 selected
+        const idx = [...sheetSelect.options].findIndex((o) => o.value === want);
+        if (idx >= 0) sheetSelect.selectedIndex = idx;
       } else if (sheets.length) {
-        sheetSelect.value = sheetOptionValue(sheets[0]);
+        sheetSelect.selectedIndex = 0;
       }
     }
 
@@ -589,22 +613,27 @@
     }
 
     async function upsertAddedSheet(sheetId, gid, titleHint) {
-      const list = readAddedSheets().filter((s) => !(s.id === sheetId && String(s.gid || "0") === String(gid || "0")));
+      const gidNorm = normalizeGid(gid);
+      const list = readAddedSheets().filter(
+        (s) => !(s.id === sheetId && normalizeGid(s.gid) === gidNorm)
+      );
       let title = cleanDocTitle(titleHint || "");
       // 若只有檔名、沒有分頁名，再抓一次完整「檔名｜分頁」
       if (!title || !title.includes("｜")) {
-        const fetched = await fetchSheetDisplayName(sheetId, gid || "0");
+        const fetched = await fetchSheetDisplayName(sheetId, gidNorm);
         if (fetched) title = fetched;
       }
       if (!title) title = "自訂試算表";
-      if (sheetId === DEFAULT_SHEET.id && String(gid || "0") === String(DEFAULT_SHEET.gid || "0")) {
+      const isDefault =
+        sheetId === DEFAULT_SHEET.id && gidNorm === normalizeGid(DEFAULT_SHEET.gid);
+      if (isDefault) {
         DEFAULT_SHEET.title = title;
-        DEFAULT_SHEET.gid = gid || "0";
+        DEFAULT_SHEET.gid = gidNorm;
       } else {
-        list.push({ id: sheetId, gid: gid || "0", title });
+        list.push({ id: sheetId, gid: gidNorm, title });
         writeAddedSheets(list);
       }
-      rebuildSheetSelect(sheetId, gid || "0");
+      rebuildSheetSelect(sheetId, gidNorm);
       return title;
     }
 
@@ -770,36 +799,56 @@
       if (panel) panel.hidden = false;
     }
 
+    let loadSeq = 0;
+
     async function loadSheetById(sheetId, gid, lessonOneBased, titleHint) {
+      const gidNorm = normalizeGid(gid);
+      const seq = ++loadSeq;
       currentSheetId = sheetId;
-      currentGid = gid || "0";
+      currentGid = gidNorm;
       pendingLessonIndex = Math.max(0, (parseInt(lessonOneBased, 10) || 1) - 1);
+
+      // 先立刻切換選單顯示，避免仍停在「國語一上」
+      rebuildSheetSelect(sheetId, gidNorm);
+      updateSourceTag();
       sentenceIndexContainer.textContent = "載入試算表中…";
+
       try {
-        const rows = await fetchLessonSheetRows(currentSheetId, currentGid);
+        const rows = await fetchLessonSheetRows(sheetId, gidNorm);
+        if (seq !== loadSeq) return; // 已切換到別的表，忽略過期結果
         allLessons = buildLessonsFromRows(rows);
         if (!Object.keys(allLessons).length) throw new Error("empty lessons");
 
-        await upsertAddedSheet(currentSheetId, currentGid, titleHint);
-        // 背景再確認一次標籤（檔名｜分頁），避免殘留 Google 字樣或缺分頁名
-        fetchSheetDisplayName(currentSheetId, currentGid).then((name) => {
-          if (!name) return;
-          if (currentSheetId === DEFAULT_SHEET.id && String(currentGid) === String(DEFAULT_SHEET.gid || "0")) {
+        await upsertAddedSheet(sheetId, gidNorm, titleHint);
+        if (seq !== loadSeq) return;
+
+        // 背景再確認標籤；用載入當下的 id/gid，避免被後來的切換覆蓋錯
+        fetchSheetDisplayName(sheetId, gidNorm).then((name) => {
+          if (!name || seq !== loadSeq) return;
+          const isDefault =
+            sheetId === DEFAULT_SHEET.id && gidNorm === normalizeGid(DEFAULT_SHEET.gid);
+          if (isDefault) {
             DEFAULT_SHEET.title = name;
           } else {
-            const list = readAddedSheets().map((s) =>
-              s.id === currentSheetId && String(s.gid || "0") === String(currentGid)
-                ? { ...s, title: name }
-                : s
-            );
+            let list = readAddedSheets();
+            let found = false;
+            list = list.map((s) => {
+              if (s.id === sheetId && normalizeGid(s.gid) === gidNorm) {
+                found = true;
+                return { ...s, title: name };
+              }
+              return s;
+            });
+            if (!found) list.push({ id: sheetId, gid: gidNorm, title: name });
             writeAddedSheets(list);
           }
-          rebuildSheetSelect(currentSheetId, currentGid);
+          rebuildSheetSelect(sheetId, gidNorm);
           updateSourceTag();
         });
         updateSourceTag();
         populateLessons();
       } catch (err) {
+        if (seq !== loadSeq) return;
         console.error(err);
         sentenceIndexContainer.textContent = "試算表載入失敗：請確認已設為「知道連結的任何人可檢視」。";
         sentenceContainer.innerHTML = "";
@@ -825,7 +874,9 @@
         u.search = "";
         window.history.replaceState({}, "", u.pathname + u.hash);
       }
-      const known = getKnownSheets().find((s) => s.id === parsed.id && (s.gid || "0") === parsed.gid);
+      const known = getKnownSheets().find(
+        (s) => s.id === parsed.id && normalizeGid(s.gid) === parsed.gid
+      );
       loadSheetById(parsed.id, parsed.gid, 1, known && known.title);
     }
 
