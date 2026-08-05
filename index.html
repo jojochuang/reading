@@ -336,34 +336,6 @@
       font-size: 0.85rem;
     }
   </style>
-  <script src="strokeMap.js?v=20250203"></script>
-  <script>
-    // 檢查 strokeMap 是否正確載入
-    window.addEventListener('load', () => {
-      if (typeof strokeMap === 'undefined') {
-        console.error('❌ strokeMap.js 沒有正確載入！');
-        alert('警告：筆順圖資料沒有正確載入，請重新整理頁面或清除瀏覽器快取');
-      } else {
-        const totalChars = Object.keys(strokeMap).length;
-        console.log(`✅ strokeMap 已載入，共有 ${totalChars} 個字`);
-        
-        // 檢查特定字是否存在（用於調試）
-        const testChars = ['胖', '往', '失', '化', '虹', '食'];
-        const missing = testChars.filter(char => !strokeMap.hasOwnProperty(char));
-        if (missing.length > 0) {
-          console.warn(`⚠️  以下字沒有在 strokeMap 中: ${missing.join(', ')}`);
-          console.warn('這可能是瀏覽器快取問題，請清除快取後重新載入');
-        } else {
-          console.log('✅ 測試字（胖、往、失、化、虹、食）都在 strokeMap 中');
-        }
-        
-        // 如果字數少於預期，可能是舊版本
-        if (totalChars < 650) {
-          console.warn(`⚠️  strokeMap 字數較少（${totalChars}），可能是舊版本，建議清除快取`);
-        }
-      }
-    });
-  </script>
 </head>
 <body>
   <div class="top-bar">
@@ -1287,10 +1259,10 @@
         span.textContent = char;
         span.className = "char";
 
-        if (strokeMap.hasOwnProperty(char)) {
-         span.classList.add("has-stroke");
+        if (isHanChar(char)) {
+          span.classList.add("has-stroke");
         } else {
-         span.classList.add("no-stroke");
+          span.classList.add("no-stroke");
         }
         const imgPath = `${char}1.JPEG`;
         const img = new Image();
@@ -1392,13 +1364,26 @@
       });
     }
 
+    function isHanChar(char) {
+      return !!char && /[\u4E00-\u9FFF]/.test(char);
+    }
+
+    // 依 Unicode 字碼即時產生 twpen 筆順動畫網址（元 → 5143）
+    function strokeUrlForChar(char) {
+      if (!isHanChar(char)) return "";
+      const cp = char.codePointAt(0);
+      if (cp == null) return "";
+      return "https://www.twpen.com/bishun-animation/" + cp.toString(16) + "-stroke-order.gif";
+    }
+
     function showImageSequence(char) {
       const sentence = sentences[current];
       sequence = [];
       for (const c of sentence) {
-        if (!/[\u4E00-\u9FFF]/.test(c)) continue;
+        if (!isHanChar(c)) continue;
         sequence.push(`${c}1.JPEG`);
-        if (strokeMap[c]) sequence.push(strokeMap[c]);
+        const strokeUrl = strokeUrlForChar(c);
+        if (strokeUrl) sequence.push(strokeUrl);
       }
       currentIndex = sequence.indexOf(`${char}1.JPEG`);
       if (currentIndex === -1) currentIndex = 0; // 如果找不到，從第一個開始
