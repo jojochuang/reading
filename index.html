@@ -765,18 +765,15 @@
     }
 
     function applyLessonColumn(colIndex, rows, titleHint) {
+      // 第 1 列＝課次名稱（不下課文）；第 2 列起才是要顯示的句子／字
       const values = (rows || []).map((r) => String((r && r[0]) || "").trim());
-      let title = (titleHint || "").trim();
-      let content = values;
-      if (!title && values.length) {
-        title = values[0];
-        content = values.slice(1);
-      }
-      content = content.filter(Boolean);
-      if (!title) return null;
+      const titleFromCol = values[0] || "";
+      const content = values.slice(1).filter(Boolean);
+      let title = (titleHint || "").trim() || titleFromCol;
       // 對齊 headers 裡的課名
       const idx = lessonColIndexes.indexOf(colIndex);
       if (idx >= 0 && lessonTitles[idx]) title = lessonTitles[idx];
+      if (!title) return null;
       allLessons[title] = content;
       return title;
     }
