@@ -123,6 +123,12 @@
     .controls {
       margin-top: 2rem;
     }
+    .controls-lesson {
+      margin-top: 0.35rem;
+    }
+    .controls-lesson button {
+      background-color: #5b8def;
+    }
     button {
       font-size: 1.2rem;
       margin: 0.5rem;
@@ -397,6 +403,10 @@
     <button onclick="playAudio()">🔊 播放語音</button>
     <button onclick="nextSentence()">➡️ 下一句</button>
     <button onclick="goToFirst()">🔁 回到第一句</button>
+  </div>
+  <div class="controls controls-lesson">
+    <button type="button" onclick="prevLesson()">⬅️ 上一課</button>
+    <button type="button" onclick="nextLesson()">➡️ 下一課</button>
   </div>
 
   <div id="fullscreen-view">
@@ -949,6 +959,36 @@
         sentenceIndexContainer.textContent = "此課次載入失敗，請稍後再試。";
         sentenceContainer.innerHTML = "";
       }
+    }
+
+    function syncLessonQuery(lessonOneBased) {
+      if (!(window.history && window.history.replaceState)) return;
+      try {
+        const u = new URL(window.location.href);
+        if (!u.searchParams.get("sheet_id") && !currentSheetId) return;
+        if (currentSheetId) u.searchParams.set("sheet_id", currentSheetId);
+        u.searchParams.set("gid", currentGid || "0");
+        u.searchParams.set("lesson", String(lessonOneBased));
+        window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+      } catch (e) {}
+    }
+
+    async function goToLessonByIndex(index) {
+      if (!lessonTitles.length) return;
+      const i = ((index % lessonTitles.length) + lessonTitles.length) % lessonTitles.length;
+      lessonSelect.value = String(i);
+      await changeLesson();
+      syncLessonQuery(i + 1);
+    }
+
+    function prevLesson() {
+      const i = parseInt(lessonSelect.value, 10) || 0;
+      goToLessonByIndex(i - 1);
+    }
+
+    function nextLesson() {
+      const i = parseInt(lessonSelect.value, 10) || 0;
+      goToLessonByIndex(i + 1);
     }
 
     function initCustomSheetPanel() {
