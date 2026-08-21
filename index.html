@@ -622,11 +622,7 @@
         (s) => !(s.id === sheetId && normalizeGid(s.gid) === gidNorm)
       );
       let title = cleanDocTitle(titleHint || "");
-      // 若只有檔名、沒有分頁名，再抓一次完整「檔名｜分頁」
-      if (!title || !title.includes("｜")) {
-        const fetched = await fetchSheetDisplayName(sheetId, gidNorm);
-        if (fetched) title = fetched;
-      }
+      const needsFetch = !title || !title.includes("｜");
       if (!title) title = "自訂試算表";
       const isDefault =
         sheetId === DEFAULT_SHEET.id && gidNorm === normalizeGid(DEFAULT_SHEET.gid);
@@ -638,6 +634,32 @@
         writeAddedSheets(list);
       }
       rebuildSheetSelect(sheetId, gidNorm);
+
+      // 檔名／分頁名改背景抓，不擋首屏顯示
+      if (needsFetch) {
+        fetchSheetDisplayName(sheetId, gidNorm).then((fetched) => {
+          if (!fetched) return;
+          if (isDefault) {
+            DEFAULT_SHEET.title = fetched;
+          } else {
+            let next = readAddedSheets();
+            let found = false;
+            next = next.map((s) => {
+              if (s.id === sheetId && normalizeGid(s.gid) === gidNorm) {
+                found = true;
+                return { ...s, title: fetched };
+              }
+              return s;
+            });
+            if (!found) next.push({ id: sheetId, gid: gidNorm, title: fetched });
+            writeAddedSheets(next);
+          }
+          if (currentSheetId === sheetId && normalizeGid(currentGid) === gidNorm) {
+            rebuildSheetSelect(sheetId, gidNorm);
+            updateSourceTag();
+          }
+        }).catch(() => {});
+      }
       return title;
     }
 
@@ -974,34 +996,7 @@
           }
         }
 
-        await upsertAddedSheet(sheetId, gidNorm, titleHint);
-        if (seq !== loadSeq) return;
-
-        fetchSheetDisplayName(sheetId, gidNorm).then((name) => {
-          if (!name || seq !== loadSeq) return;
-          const isDefault =
-            sheetId === DEFAULT_SHEET.id && gidNorm === normalizeGid(DEFAULT_SHEET.gid);
-          if (isDefault) {
-            DEFAULT_SHEET.title = name;
-          } else {
-            let list = readAddedSheets();
-            let found = false;
-            list = list.map((s) => {
-              if (s.id === sheetId && normalizeGid(s.gid) === gidNorm) {
-                found = true;
-                return { ...s, title: name };
-              }
-              return s;
-            });
-            if (!found) list.push({ id: sheetId, gid: gidNorm, title: name });
-            writeAddedSheets(list);
-          }
-          rebuildSheetSelect(sheetId, gidNorm);
-          updateSourceTag();
-        });
-        updateSourceTag();
-
-        // 課次選單先顯示已拿到的欄；其餘 B 以後背景補
+        // 先顯示內容，標題／其餘欄位都丟背景，避免分享連結被「抓檔名」卡住
         const showIdx = Math.min(
           preferCol > 0 && lessonColIndexes.indexOf(preferCol) >= 0
             ? lessonColIndexes.indexOf(preferCol)
@@ -1010,7 +1005,17 @@
         );
         pendingLessonIndex = showIdx;
         populateLessons();
+        updateSourceTag();
         scheduleDiscoverColumnsAfterA(preferCol, seq);
+
+        // 選單標題可稍後再補，不 await
+        const knownTitle =
+          titleHint ||
+          (getKnownSheets().find(
+            (s) => s.id === sheetId && normalizeGid(s.gid) === gidNorm
+          ) || {}).title ||
+          "";
+        upsertAddedSheet(sheetId, gidNorm, knownTitle).catch(() => {});
       } catch (err) {
         if (seq !== loadSeq) return;
         console.error(err);
@@ -1175,8 +1180,8 @@
           const u = new URL(parsed.shareUrl);
           window.history.replaceState({}, "", u.pathname + u.search + u.hash);
         }
-        const title = await fetchSheetDisplayName(parsed.sid, parsed.gidParsed);
-        await loadSheetById(parsed.sid, parsed.gidParsed, parsed.lessonNum, title);
+        // 不先抓檔名（會卡住）；loadSheetById 會背景補標題
+        await loadSheetById(parsed.sid, parsed.gidParsed, parsed.lessonNum, "");
       });
 
       copyBtn && copyBtn.addEventListener("click", () => {
@@ -1772,7 +1777,15 @@ function playAudio() {
     (function boot() {
       const params = getQueryParams();
       if (params.sheet_id) {
-        loadSheetById(params.sheet_id, params.gid || "0", params.lesson || "1");
+        const known = getKnownSheets().find(
+          (s) => s.id === params.sheet_id && normalizeGid(s.gid) === normalizeGid(params.gid || "0")
+        );
+        loadSheetById(
+          params.sheet_id,
+          params.gid || "0",
+          params.lesson || "1",
+          known && known.title
+        );
       } else {
         loadSheetById(DEFAULT_SHEET.id, DEFAULT_SHEET.gid, 1, DEFAULT_SHEET.title);
       }
