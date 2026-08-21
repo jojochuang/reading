@@ -435,6 +435,15 @@
       gid: "0",
       title: "國語一上｜一上", // 檔名｜分頁名
     };
+    // 內建試算表（所有裝置都會看到；勿只靠 localStorage）
+    const PRESET_SHEETS = [
+      DEFAULT_SHEET,
+      {
+        id: "18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM",
+        gid: "0",
+        title: "字圖清單",
+      },
+    ];
     const ADDED_SHEETS_KEY = "reading_added_sheets_v1";
     const ADD_OPTION_VALUE = "__add__";
 
@@ -485,6 +494,7 @@
         list.push(item);
       };
       pushSheet(DEFAULT_SHEET);
+      PRESET_SHEETS.forEach(pushSheet);
       readAddedSheets().forEach(pushSheet);
       return list;
     }
