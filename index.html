@@ -441,7 +441,17 @@
       {
         id: "18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM",
         gid: "0",
-        title: "字圖清單",
+        title: "字圖清單｜全部",
+      },
+      {
+        id: "18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM",
+        gid: "213765597",
+        title: "字圖清單｜美洲一冊",
+      },
+      {
+        id: "18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM",
+        gid: "1693968879",
+        title: "字圖清單｜TK",
       },
     ];
     const ADDED_SHEETS_KEY = "reading_added_sheets_v1";
@@ -756,6 +766,27 @@
       });
     }
 
+    /** 把單一欄位（含第 1 列課名）掛進課次清單；不覆蓋其他已載入課 */
+    function upsertLessonFromColumn(colIndex, rows) {
+      const values = (rows || []).map((r) => String((r && r[0]) || "").trim());
+      const title = values[0] || "";
+      const content = values.slice(1).filter(Boolean);
+      if (!title) return null;
+
+      const existing = lessonColIndexes.indexOf(colIndex);
+      if (existing >= 0) {
+        lessonTitles[existing] = title;
+      } else {
+        // 依欄位順序插入
+        let insertAt = lessonColIndexes.findIndex((c) => c > colIndex);
+        if (insertAt < 0) insertAt = lessonColIndexes.length;
+        lessonTitles.splice(insertAt, 0, title);
+        lessonColIndexes.splice(insertAt, 0, colIndex);
+      }
+      allLessons[title] = content;
+      return title;
+    }
+
     function applyLessonColumn(colIndex, rows, titleHint) {
       // 第 1 列＝課次名稱（不下課文）；第 2 列起才是要顯示的句子／字
       const values = (rows || []).map((r) => String((r && r[0]) || "").trim());
@@ -788,8 +819,24 @@
       return true;
     }
 
+    function refreshLessonSelectKeepCurrent() {
+      const prevTitle = lessonTitles[parseInt(lessonSelect.value, 10)] || "";
+      const prevVal = lessonSelect.value;
+      lessonSelect.innerHTML = "";
+      lessonTitles.forEach((title, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = title;
+        lessonSelect.appendChild(option);
+      });
+      let idx = lessonTitles.indexOf(prevTitle);
+      if (idx < 0) idx = parseInt(prevVal, 10) || 0;
+      if (idx >= lessonTitles.length) idx = Math.max(0, lessonTitles.length - 1);
+      lessonSelect.value = String(idx);
+    }
+
     function scheduleBackgroundLessonPrefetch(preferIndex) {
-      // 首屏完成後再慢慢預載其他課，不阻擋第一次開啟
+      // 先鄰近課，再其餘；只抓尚未載入內容的欄
       const order = [];
       if (preferIndex > 0) order.push(preferIndex - 1);
       if (preferIndex + 1 < lessonTitles.length) order.push(preferIndex + 1);
@@ -799,11 +846,11 @@
       let n = 0;
       const tick = () => {
         if (n >= order.length) return;
-        if (currentSheetId === "") return;
+        if (!currentSheetId) return;
         const idx = order[n++];
         const title = lessonTitles[idx];
         if (!title || Array.isArray(allLessons[title])) {
-          setTimeout(tick, 50);
+          setTimeout(tick, 40);
           return;
         }
         const colIndex = lessonColIndexes[idx];
@@ -815,9 +862,61 @@
             applyLessonColumn(colIndex, rows, title);
           })
           .catch(() => {})
-          .finally(() => setTimeout(tick, 200));
+          .finally(() => setTimeout(tick, 180));
       };
-      setTimeout(tick, 800);
+      setTimeout(tick, 500);
+    }
+
+    /** 先有 A 欄後，背景逐欄發現 B、C…（依序遇到空課名就停止） */
+    function scheduleDiscoverColumnsAfterA(preferColIndex, loadSeqAtStart) {
+      const sheetId = currentSheetId;
+      const gid = currentGid;
+      const MAX_COLS = 80;
+      const queue = [];
+      if (preferColIndex > 0) queue.push(preferColIndex);
+      for (let c = 1; c < MAX_COLS; c++) {
+        if (c !== preferColIndex) queue.push(c);
+      }
+
+      let qi = 0;
+      let stoppedSequential = false;
+
+      const tick = () => {
+        if (loadSeqAtStart !== loadSeq) return;
+        if (sheetId !== currentSheetId || gid !== currentGid) return;
+        if (qi >= queue.length || stoppedSequential) {
+          scheduleBackgroundLessonPrefetch(
+            Math.max(0, lessonColIndexes.indexOf(preferColIndex))
+          );
+          return;
+        }
+        const target = queue[qi++];
+        if (lessonColIndexes.indexOf(target) >= 0) {
+          setTimeout(tick, 30);
+          return;
+        }
+
+        fetchLessonColumn(sheetId, gid, target)
+          .then((rows) => {
+            if (loadSeqAtStart !== loadSeq) return;
+            if (sheetId !== currentSheetId || gid !== currentGid) return;
+            const title = upsertLessonFromColumn(target, rows);
+            if (!title) {
+              // 依序掃描到空欄 → 後面沒有更多課
+              if (target !== preferColIndex) stoppedSequential = true;
+              setTimeout(tick, 40);
+              return;
+            }
+            refreshLessonSelectKeepCurrent();
+            setTimeout(tick, 100);
+          })
+          .catch(() => {
+            scheduleBackgroundLessonPrefetch(
+              Math.max(0, lessonColIndexes.indexOf(preferColIndex))
+            );
+          });
+      };
+      setTimeout(tick, 200);
     }
 
     function updateSourceTag() {
@@ -856,21 +955,24 @@
       sentenceIndexContainer.textContent = "載入試算表中…";
 
       try {
-        // 1) 只抓第 1 列課名（很小）  2) 只抓目前課次那一欄
-        const headerRows = await fetchLessonSheetViaGvizJsonp(
-          sheetId,
-          gidNorm,
-          "select * limit 1"
-        );
+        // 為加速首屏：先只抓 A 欄（課名＋內容），不先下載整頁
+        const preferCol = pendingLessonIndex; // 假設課次序＝欄次序（0=A）
+        sentenceIndexContainer.textContent = "載入 A 欄…";
+        const aRows = await fetchLessonColumn(sheetId, gidNorm, 0);
         if (seq !== loadSeq) return;
-        applyLessonHeaders(headerRows[0] || []);
-        if (!lessonTitles.length) throw new Error("empty lessons");
+        const aTitle = upsertLessonFromColumn(0, aRows);
+        if (!aTitle) throw new Error("empty column A");
 
-        const lessonIdx = Math.min(pendingLessonIndex, lessonTitles.length - 1);
-        const colIndex = lessonColIndexes[lessonIdx];
-        const colRows = await fetchLessonColumn(sheetId, gidNorm, colIndex);
-        if (seq !== loadSeq) return;
-        applyLessonColumn(colIndex, colRows, lessonTitles[lessonIdx]);
+        if (preferCol > 0) {
+          sentenceIndexContainer.textContent = `載入第 ${preferCol + 1} 欄…`;
+          try {
+            const preferRows = await fetchLessonColumn(sheetId, gidNorm, preferCol);
+            if (seq !== loadSeq) return;
+            upsertLessonFromColumn(preferCol, preferRows);
+          } catch (e) {
+            console.warn("prefer column load failed, fallback to A", e);
+          }
+        }
 
         await upsertAddedSheet(sheetId, gidNorm, titleHint);
         if (seq !== loadSeq) return;
@@ -898,9 +1000,17 @@
           updateSourceTag();
         });
         updateSourceTag();
-        pendingLessonIndex = lessonIdx;
+
+        // 課次選單先顯示已拿到的欄；其餘 B 以後背景補
+        const showIdx = Math.min(
+          preferCol > 0 && lessonColIndexes.indexOf(preferCol) >= 0
+            ? lessonColIndexes.indexOf(preferCol)
+            : 0,
+          Math.max(0, lessonTitles.length - 1)
+        );
+        pendingLessonIndex = showIdx;
         populateLessons();
-        scheduleBackgroundLessonPrefetch(lessonIdx);
+        scheduleDiscoverColumnsAfterA(preferCol, seq);
       } catch (err) {
         if (seq !== loadSeq) return;
         console.error(err);
