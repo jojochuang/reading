@@ -474,6 +474,16 @@
         title: "字圖清單｜TK",
       },
     ];
+    // 美洲二～五：一列一課。B＝第一句，C+D＝第二句。美洲一與其他試算表不走這條
+    const AMERICA_BCD_SHEET_KEYS = new Set([
+      "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1601198504",
+      "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1424562399",
+      "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1127835491",
+      "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1033469457",
+    ]);
+    function isAmericaBcdSheet(sheetId, gid) {
+      return AMERICA_BCD_SHEET_KEYS.has(sheetId + "::" + normalizeGid(gid));
+    }
     const ADDED_SHEETS_KEY = "reading_added_sheets_v1";
     const ADD_OPTION_VALUE = "__add__";
 
@@ -829,6 +839,30 @@
       return title;
     }
 
+    /** 美洲二～五：A＝課名，B＝第一句，C 與 D 接成第二句 */
+    function applyAmericaBcdLessons(rows) {
+      lessonTitles = [];
+      lessonColIndexes = [];
+      allLessons = {};
+      (rows || []).forEach((row, i) => {
+        const cells = row || [];
+        const title = String(cells[0] || "").trim();
+        if (!title || title === "課次") return;
+        const first = String(cells[1] || "").trim();
+        const second = (String(cells[2] || "").trim() + String(cells[3] || "").trim()).trim();
+        const content = [first, second].filter(Boolean);
+        let name = title;
+        if (Object.prototype.hasOwnProperty.call(allLessons, name)) {
+          let n = 2;
+          while (Object.prototype.hasOwnProperty.call(allLessons, name + " (" + n + ")")) n++;
+          name = name + " (" + n + ")";
+        }
+        lessonTitles.push(name);
+        lessonColIndexes.push(i);
+        allLessons[name] = content;
+      });
+    }
+
     function applyLessonColumn(colIndex, rows, titleHint) {
       // 第 1 列＝課次名稱（不下課文）；第 2 列起才是要顯示的句子／字
       const values = (rows || []).map((r) => String((r && r[0]) || "").trim());
@@ -997,6 +1031,25 @@
       sentenceIndexContainer.textContent = "載入試算表中…";
 
       try {
+        if (isAmericaBcdSheet(sheetId, gidNorm)) {
+          sentenceIndexContainer.textContent = "載入課次…";
+          const rows = await fetchLessonSheetViaGvizJsonp(sheetId, gidNorm, "select A, B, C, D");
+          if (seq !== loadSeq) return;
+          applyAmericaBcdLessons(rows);
+          if (!lessonTitles.length) throw new Error("empty america sheet");
+          pendingLessonIndex = Math.min(pendingLessonIndex, Math.max(0, lessonTitles.length - 1));
+          populateLessons();
+          updateSourceTag();
+          const knownTitle =
+            titleHint ||
+            (getKnownSheets().find(
+              (s) => s.id === sheetId && normalizeGid(s.gid) === gidNorm
+            ) || {}).title ||
+            "";
+          upsertAddedSheet(sheetId, gidNorm, knownTitle).catch(() => {});
+          return;
+        }
+
         // 為加速首屏：先只抓 A 欄（課名＋內容），不先下載整頁
         const preferCol = pendingLessonIndex; // 假設課次序＝欄次序（0=A）
         sentenceIndexContainer.textContent = "載入 A 欄…";
