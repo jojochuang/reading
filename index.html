@@ -5,15 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>中文教學展示</title>
   <style>
-    /* 繁體中文字體堆疊 - 優先使用繁體字體 */
+    /* 與聽寫考試同款：全字庫楷體 + ToneOZ 紅色部首 */
     @font-face {
-      font-family: 'TraditionalChinese';
-      unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2A700-2B73F, U+2B740-2B81F, U+2B820-2CEAF;
+      font-family: 'TW-Kai-98';
+      src: url('fonts/TW-Kai-98_1.woff2') format('woff2');
+      font-display: block;
+    }
+    @font-face {
+      font-family: 'ToneOZRadicalZKaiTraditional';
+      src: url('fonts/ToneOZ-RadicalZ-KaiTraditional.ttf') format('truetype');
+      font-display: block;
     }
     
     body {
       margin: 0;
-      /* 繁體中文字體優先順序：系統繁體字體 > 通用中文字體 > 備用字體 */
       font-family: 
         "PingFang TC", "Microsoft JhengHei", "Microsoft YaHei", 
         "Heiti TC", "STHeiti", "LiHei Pro", "LiSong Pro", 
@@ -22,19 +27,11 @@
       background-color: #fff8f0;
       text-align: center;
       overflow-x: hidden;
-      /* 確保繁體中文正確渲染 */
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
     
-    /* 針對中文字符特別指定字體 */
-    .sentence, .char {
-      font-family: 
-        "PingFang TC", "Microsoft JhengHei", "Microsoft YaHei", 
-        "Heiti TC", "STHeiti", "LiHei Pro", "LiSong Pro", 
-        "BiauKai", "KaiTi", "DFKai-SB", "標楷體", "新細明體",
-        "Comic Sans MS", sans-serif;
-      /* 使用繁體中文渲染 */
+    .sentence {
       font-feature-settings: "kern" 1, "liga" 1;
     }
     select {
@@ -55,13 +52,46 @@
       vertical-align: top;
     }
     .char {
-      display: inline-block;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       padding: 0.2em 0.4em;
       border-radius: 10px;
       background: #eee;
       box-shadow: 2px 2px 5px #ccc;
       transition: transform 0.2s;
       position: relative;
+      line-height: 1;
+      font-feature-settings: "kern" 1, "liga" 1;
+    }
+    .char-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    /* 黑色楷體在下 */
+    .char-base {
+      font-family: 'TW-Kai-98', '標楷體', 'DFKai-SB', 'KaiTi', serif;
+      font-size: inherit;
+      font-weight: 400;
+      line-height: 1;
+      color: #000;
+    }
+    /* 紅色部首在上；位移比例對齊 dictation_exam（3.7mm / 2.4mm ≈ 0.25em / 0.16em） */
+    .char-radical {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(calc(-50% + 0.25em), calc(-50% - 0.16em));
+      font-family: 'ToneOZRadicalZKaiTraditional', serif;
+      font-size: inherit;
+      font-weight: 400;
+      line-height: 1;
+      color: #c62828;
+      pointer-events: none;
     }
     .char.has-img {
       background: #ffefd5;
@@ -72,6 +102,9 @@
     }
     .char.no-stroke {
       background: #ddd;
+      font-family:
+        "PingFang TC", "Microsoft JhengHei", "Microsoft YaHei",
+        "Heiti TC", "STHeiti", sans-serif;
     }
     .char.has-img img.preview {
       display: block;
@@ -1494,13 +1527,24 @@
         unit.className = "char-unit";
 
         const span = document.createElement("span");
-        span.textContent = char;
         span.className = "char";
 
         if (isHanChar(char)) {
           span.classList.add("has-stroke");
+          const wrap = document.createElement("span");
+          wrap.className = "char-wrap";
+          const spanBase = document.createElement("span");
+          spanBase.className = "char-base";
+          spanBase.textContent = char;
+          const spanRadical = document.createElement("span");
+          spanRadical.className = "char-radical";
+          spanRadical.textContent = char;
+          wrap.appendChild(spanBase);
+          wrap.appendChild(spanRadical);
+          span.appendChild(wrap);
         } else {
           span.classList.add("no-stroke");
+          span.textContent = char;
         }
         const imgPath = `${char}1.JPEG`;
         const img = new Image();
