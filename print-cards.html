@@ -125,7 +125,7 @@
       width: 85mm;
       height: 50mm;
       background: #fff;
-      border: 1px solid #000; /* 暫時顯示，確認裁切安全後再拿掉 */
+      border: none;
       box-sizing: border-box;
     }
     table.data th.col-check,
@@ -181,7 +181,7 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      transform: translate(calc(-50% + 0.25em), calc(-50% - 0.16em));
+      transform: translate(calc(-50% + 0.25em), calc(-50% - 0.16em - 0.5mm));
       font-family: 'ToneOZRadicalZKaiTraditional', serif;
       font-size: inherit;
       font-weight: 400;
@@ -783,16 +783,6 @@
             const [cx, cy] = CARD_POS[i];
             const midX = cx + 85 / 2;
             const midY = cy + 50 / 2;
-
-            // 暫時顯示字卡黑框（確認裁切安全後再移除）
-            page.drawRectangle({
-              x: mmX(cx),
-              y: mmYFromTop(cy + 50),
-              width: mmX(85),
-              height: mmX(50),
-              borderWidth: 0.5,
-              borderColor: black,
-            });
 
             const captured = charCache.get(card.char);
             const png = await pdfDoc.embedPng(dataUrlToUint8(captured.dataUrl));
