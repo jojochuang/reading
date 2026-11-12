@@ -153,6 +153,33 @@
       color: #fff;
       cursor: pointer;
     }
+    .char-pick {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.6em;
+      margin: 2px;
+      padding: 2px 6px;
+      border: 1px solid #90caf9;
+      border-radius: 6px;
+      background: #1565c0;
+      color: #fff;
+      font-size: 1.2rem;
+      font-family: 'TW-Kai-98', '標楷體', 'DFKai-SB', 'KaiTi', serif;
+      line-height: 1.2;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .char-pick:not(.on) {
+      background: #eceff1;
+      border-color: #cfd8dc;
+      color: #90a4ae;
+      text-decoration: line-through;
+    }
+    .char-pick-cell {
+      line-height: 1.6;
+      max-width: 280px;
+    }
     .card-char {
       position: absolute;
       inset: 0;
@@ -242,10 +269,11 @@
 
   <div class="panel panel-screen">
     <div class="row-select-bar">
-      <span>生字列：</span>
+      <span>生字列／單字：</span>
       <button type="button" id="btnSelectAll">全選</button>
       <button type="button" id="btnSelectNone">全不選</button>
       <span class="status" id="selectStatus"></span>
+      <span class="status" style="color:#888;">（B／E 欄點字可取消印製）</span>
     </div>
     <div class="data-table-wrap">
       <table class="data">
@@ -432,11 +460,23 @@
       return out;
     }
 
+    function currentCharField() {
+      const script = (document.querySelector('input[name="script"]:checked') || {}).value || "trad";
+      return script === "simp" ? "simp" : "trad";
+    }
+
     function updateSelectStatus() {
       const boxes = [...document.querySelectorAll(".row-check")];
       const n = boxes.filter((b) => b.checked).length;
+      const field = currentCharField();
+      const charBtns = [...document.querySelectorAll(`.char-pick[data-field="${field}"]`)];
+      const charOn = charBtns.filter((b) => b.classList.contains("on")).length;
       const el = document.getElementById("selectStatus");
-      if (el) el.textContent = boxes.length ? `已選 ${n} / ${boxes.length} 列` : "";
+      if (el) {
+        el.textContent = boxes.length
+          ? `已選 ${n}/${boxes.length} 列，${field === "simp" ? "E" : "B"} 欄 ${charOn}/${charBtns.length} 字`
+          : "";
+      }
       const all = document.getElementById("checkAll");
       if (all && boxes.length) {
         all.checked = n === boxes.length;
@@ -450,6 +490,9 @@
         const tr = b.closest("tr");
         if (tr) tr.classList.toggle("row-selected", checked);
       });
+      document.querySelectorAll(".char-pick").forEach((btn) => {
+        btn.classList.toggle("on", checked);
+      });
       updateSelectStatus();
     }
 
@@ -461,6 +504,12 @@
       return sheetRows.filter((r) => selected.has(String(r.rowNum)));
     }
 
+    function renderCharButtons(chars, rowNum, field) {
+      return chars.map((ch, idx) =>
+        `<button type="button" class="char-pick on" data-row="${rowNum}" data-field="${field}" data-idx="${idx}" title="點一下取消／再點選取">${escapeHtml(ch)}</button>`
+      ).join("");
+    }
+
     function renderDataTable() {
       const body = document.getElementById("dataBody");
       if (!sheetRows.length) {
@@ -468,15 +517,18 @@
         updateSelectStatus();
         return;
       }
-      body.innerHTML = sheetRows.map((r) =>
-        `<tr class="row-selected" data-row="${r.rowNum}">
+      body.innerHTML = sheetRows.map((r) => {
+        const tradChars = extractUniqueHan(r.trad);
+        const simpChars = extractUniqueHan(r.simp);
+        return `<tr class="row-selected" data-row="${r.rowNum}">
           <td class="col-check"><input type="checkbox" class="row-check" value="${r.rowNum}" checked /></td>
           <td>${r.rowNum}</td>
           <td>${escapeHtml(r.lesson)}</td>
-          <td>${escapeHtml(r.trad)}</td>
-          <td>${escapeHtml(r.simp)}</td>
-        </tr>`
-      ).join("");
+          <td class="char-pick-cell" data-field="trad">${renderCharButtons(tradChars, r.rowNum, "trad") || "<span style='color:#bbb'>—</span>"}</td>
+          <td class="char-pick-cell" data-field="simp">${renderCharButtons(simpChars, r.rowNum, "simp") || "<span style='color:#bbb'>—</span>"}</td>
+        </tr>`;
+      }).join("");
+
       body.querySelectorAll(".row-check").forEach((box) => {
         box.addEventListener("change", () => {
           const tr = box.closest("tr");
@@ -484,9 +536,16 @@
           updateSelectStatus();
         });
       });
+      body.querySelectorAll(".char-pick").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          btn.classList.toggle("on");
+          updateSelectStatus();
+        });
+      });
       body.querySelectorAll("tr[data-row]").forEach((tr) => {
         tr.addEventListener("click", (e) => {
-          if (e.target.closest("input")) return;
+          if (e.target.closest("input, .char-pick")) return;
           const box = tr.querySelector(".row-check");
           if (!box) return;
           box.checked = !box.checked;
@@ -518,13 +577,18 @@
 
     function buildCards(opts) {
       const cards = [];
+      const field = opts.script === "simp" ? "simp" : "trad";
       const rows = getSelectedRows();
       for (const row of rows) {
-        const raw = opts.script === "simp" ? row.simp : row.trad;
-        const chars = extractUniqueHan(raw);
-        for (const ch of chars) {
-          cards.push({ char: ch, lesson: row.lesson });
-        }
+        const allChars = extractUniqueHan(field === "simp" ? row.simp : row.trad);
+        const onBtns = document.querySelectorAll(
+          `.char-pick.on[data-row="${row.rowNum}"][data-field="${field}"]`
+        );
+        onBtns.forEach((btn) => {
+          const idx = parseInt(btn.getAttribute("data-idx"), 10);
+          const ch = allChars[idx];
+          if (ch) cards.push({ char: ch, lesson: row.lesson });
+        });
       }
       return cards;
     }
@@ -609,7 +673,10 @@
     }
 
     document.querySelectorAll('input[name="script"]').forEach((el) => {
-      el.addEventListener("change", syncRadicalOption);
+      el.addEventListener("change", () => {
+        syncRadicalOption();
+        updateSelectStatus();
+      });
     });
     // 向量 PDF（字型子集），避免整頁截圖造成檔案過大
     const MM = 72 / 25.4; // mm → PDF point
