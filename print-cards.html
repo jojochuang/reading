@@ -107,6 +107,19 @@
       box-shadow: 0 2px 12px rgba(0,0,0,0.12);
       overflow: hidden;
     }
+    /* 切割對齊線（裁切標記） */
+    .crop-mark {
+      position: absolute;
+      background: #000;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .crop-mark.h {
+      height: 0.25mm;
+    }
+    .crop-mark.v {
+      width: 0.25mm;
+    }
     .card {
       position: absolute;
       width: 85mm;
@@ -230,6 +243,49 @@
       [10, 110], [95, 110], [180, 110],
       [10, 160], [95, 160], [180, 160],
     ];
+
+    /** 切割對齊線：橫線列 y、直線欄 x（mm） */
+    const CROP_Y = [10, 60, 110, 160, 210];
+    const CROP_X = [10, 95, 180, 265];
+
+    function appendCropMarks(page) {
+      // 左邊橫線 8mm：x=0
+      CROP_Y.forEach((y) => {
+        const el = document.createElement("div");
+        el.className = "crop-mark h";
+        el.style.left = "0mm";
+        el.style.top = y + "mm";
+        el.style.width = "8mm";
+        page.appendChild(el);
+      });
+      // 右邊橫線 8mm：x=265
+      CROP_Y.forEach((y) => {
+        const el = document.createElement("div");
+        el.className = "crop-mark h";
+        el.style.left = "265mm";
+        el.style.top = y + "mm";
+        el.style.width = "8mm";
+        page.appendChild(el);
+      });
+      // 上邊直線 8mm：y=2
+      CROP_X.forEach((x) => {
+        const el = document.createElement("div");
+        el.className = "crop-mark v";
+        el.style.left = x + "mm";
+        el.style.top = "2mm";
+        el.style.height = "8mm";
+        page.appendChild(el);
+      });
+      // 下邊直線 6mm：y=210
+      CROP_X.forEach((x) => {
+        const el = document.createElement("div");
+        el.className = "crop-mark v";
+        el.style.left = x + "mm";
+        el.style.top = "210mm";
+        el.style.height = "6mm";
+        page.appendChild(el);
+      });
+    }
 
     let sheetRows = []; // { rowNum, lesson, trad, simp }
 
@@ -435,6 +491,7 @@
       for (let p = 0; p < pageCount; p++) {
         const page = document.createElement("div");
         page.className = "sheet-page";
+        appendCropMarks(page);
         const slice = cards.slice(p * perPage, (p + 1) * perPage);
         slice.forEach((card, i) => {
           const [x, y] = CARD_POS[i];
