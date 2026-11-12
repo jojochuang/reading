@@ -283,7 +283,7 @@
     /** 切割對齊線（全部 8mm） */
     const CROP_EDGE_Y = [10, 60, 110, 160, 210]; // 左右邊橫線的 y
     const CROP_EDGE_X = [10, 95, 180, 265]; // 上下邊直線的 x
-    const CROP_MID_H = { ys: [60, 100, 160], xs: [91, 176] }; // 中間橫線
+    const CROP_MID_H = { ys: [60, 110, 160], xs: [91, 176] }; // 中間橫線（原 y=100 → +10）
     const CROP_MID_V = { xs: [95, 180], ys: [56, 106, 156] }; // 中間直線
 
     function addCropH(page, x, y) {
