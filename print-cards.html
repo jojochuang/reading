@@ -267,6 +267,7 @@
 
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search || "");
     const sheetId = (params.get("sheet_id") || "").trim();
@@ -670,37 +671,57 @@
     }
 
     /**
-     * 與網頁預覽一致：楷書／部首共用「同一條」baseline（只用楷書度量計算），
-     * 再依 CSS translate(+0.25em, -0.16em) 平移部首。
-     * 先前各自 heightAtSize 置中 → 兩字型錯開；baseline 算錯 → 整字下移。
+     * 用與預覽完全相同的 DOM／CSS 繪出單字（楷書＋部首），再擷取成圖放入 PDF，
+     * 避免 pdf-lib 字型基線與瀏覽器不一致造成錯位／下移。
      */
-    function drawCardChars(page, kaiFont, radicalFont, ch, midXmm, midYmm, sizePt, black, red) {
-      const centerPdfY = mmYFromTop(midYmm);
-      // 以楷書墨盒垂直置中，求出共用 baseline
-      const ascent = kaiFont.heightAtSize(sizePt);
-      const totalH = kaiFont.heightAtSize(sizePt, { descender: true });
-      const descent = totalH - ascent;
-      const baseline = centerPdfY - (ascent - descent) / 2;
-
-      const kaiW = kaiFont.widthOfTextAtSize(ch, sizePt);
-      page.drawText(ch, {
-        x: mmX(midXmm) - kaiW / 2,
-        y: baseline,
-        size: sizePt,
-        font: kaiFont,
-        color: black,
-      });
-
-      if (radicalFont) {
-        const radW = radicalFont.widthOfTextAtSize(ch, sizePt);
-        page.drawText(ch, {
-          x: mmX(midXmm) - radW / 2 + 0.25 * sizePt,
-          y: baseline + 0.16 * sizePt,
-          size: sizePt,
-          font: radicalFont,
-          color: red,
-        });
+    async function captureCharImage(ch, showRadical) {
+      const holder = document.createElement("div");
+      holder.style.cssText =
+        "position:fixed;left:-10000px;top:0;background:transparent;pointer-events:none;";
+      // 外層留白：部首有 +0.25em / -0.16em 位移，避免被裁切
+      const box = document.createElement("div");
+      box.style.cssText =
+        "display:inline-block;padding:0.35em;line-height:1;overflow:visible;";
+      const wrap = document.createElement("span");
+      wrap.className = "char-wrap";
+      wrap.style.fontSize = CHAR_SIZE_PT + "pt";
+      const base = document.createElement("span");
+      base.className = "char-base";
+      base.textContent = ch;
+      wrap.appendChild(base);
+      if (showRadical) {
+        const rad = document.createElement("span");
+        rad.className = "char-radical";
+        rad.textContent = ch;
+        wrap.appendChild(rad);
       }
+      box.appendChild(wrap);
+      holder.appendChild(box);
+      document.body.appendChild(holder);
+      try {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        const canvas = await html2canvas(box, {
+          backgroundColor: null,
+          scale: 2,
+          logging: false,
+          useCORS: true,
+        });
+        return {
+          dataUrl: canvas.toDataURL("image/png"),
+          widthPx: canvas.width,
+          heightPx: canvas.height,
+        };
+      } finally {
+        holder.remove();
+      }
+    }
+
+    function dataUrlToUint8(dataUrl) {
+      const b64 = dataUrl.split(",")[1];
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
     }
 
     async function downloadPdf() {
@@ -718,7 +739,7 @@
         status.classList.add("error");
         return;
       }
-      if (!window.PDFLib || !window.fontkit) {
+      if (!window.PDFLib || !window.fontkit || !window.html2canvas) {
         status.textContent = "PDF 套件載入失敗，請重新整理後再試";
         status.classList.add("error");
         return;
@@ -727,32 +748,38 @@
       btn.disabled = true;
       status.classList.remove("error");
       try {
-        status.textContent = "載入字型中（首次較久）…";
-        await ensurePdfFonts(opts.showRadical);
+        status.textContent = "載入字型中…";
+        await ensurePdfFonts(false); // 課次文字用楷書子集
 
-        status.textContent = "產生向量 PDF 中…";
+        status.textContent = "擷取單字（與預覽相同排版）…";
         const { PDFDocument, rgb } = PDFLib;
         const pdfDoc = await PDFDocument.create();
         pdfDoc.registerFontkit(fontkit);
-
-        // subset: true → 只嵌入用到的漢字，檔案接近純文字 PDF
         const kaiFont = await pdfDoc.embedFont(fontBytesKai, { subset: true });
-        const radicalFont = opts.showRadical
-          ? await pdfDoc.embedFont(fontBytesRadical, { subset: true })
-          : null;
         const black = rgb(0, 0, 0);
-        const red = rgb(0xC6 / 255, 0x28 / 255, 0x28 / 255);
+
+        // 相同字只擷取一次
+        const charCache = new Map();
+        const uniqueChars = [...new Set(cards.map((c) => c.char))];
+        for (let i = 0; i < uniqueChars.length; i++) {
+          status.textContent = `擷取單字… ${i + 1}/${uniqueChars.length}`;
+          const ch = uniqueChars[i];
+          charCache.set(ch, await captureCharImage(ch, opts.showRadical));
+        }
 
         const perPage = CARD_POS.length;
         const pageCount = Math.ceil(cards.length / perPage);
+        // 預覽字級 135pt ≈ 47.625mm；圖依 em 盒比例置中於字卡
+        const charBoxMm = (CHAR_SIZE_PT * 25.4) / 72;
 
         for (let p = 0; p < pageCount; p++) {
-          status.textContent = `產生向量 PDF 中… ${p + 1}/${pageCount}`;
+          status.textContent = `產生 PDF 中… ${p + 1}/${pageCount}`;
           const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
           drawCropMarksPdf(page, black);
 
           const slice = cards.slice(p * perPage, (p + 1) * perPage);
-          slice.forEach((card, i) => {
+          for (let i = 0; i < slice.length; i++) {
+            const card = slice[i];
             const [cx, cy] = CARD_POS[i];
             const midX = cx + 85 / 2;
             const midY = cy + 50 / 2;
@@ -767,17 +794,23 @@
               borderColor: black,
             });
 
-            drawCardChars(
-              page,
-              kaiFont,
-              radicalFont,
-              card.char,
-              midX,
-              midY,
-              CHAR_SIZE_PT,
-              black,
-              red
-            );
+            const captured = charCache.get(card.char);
+            const png = await pdfDoc.embedPng(dataUrlToUint8(captured.dataUrl));
+            const aspect = captured.widthPx / Math.max(1, captured.heightPx);
+            // 擷取時有 0.35em 內距，放大繪製使中間字形仍約 135pt
+            const padFactor = 1.7;
+            let drawH = charBoxMm * padFactor;
+            let drawW = drawH * aspect;
+            if (drawW > 82) {
+              drawW = 82;
+              drawH = drawW / aspect;
+            }
+            page.drawImage(png, {
+              x: mmX(midX - drawW / 2),
+              y: mmYFromTop(midY + drawH / 2),
+              width: mmX(drawW),
+              height: mmX(drawH),
+            });
 
             if (opts.showLesson && card.lesson) {
               const lx = mmX(cx + 70);
@@ -790,7 +823,7 @@
                 color: black,
               });
             }
-          });
+          }
         }
 
         const pdfBytes = await pdfDoc.save();
@@ -810,7 +843,7 @@
         URL.revokeObjectURL(url);
 
         const kb = Math.max(1, Math.round(pdfBytes.length / 1024));
-        status.textContent = `已下載 PDF（${pageCount} 頁，約 ${kb} KB，向量字型）`;
+        status.textContent = `已下載 PDF（${pageCount} 頁，約 ${kb} KB）`;
         renderPreview();
       } catch (e) {
         console.error(e);
