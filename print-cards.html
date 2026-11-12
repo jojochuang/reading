@@ -260,7 +260,10 @@
       <label><input type="checkbox" id="optLesson" checked /> 課次印在字卡右下角</label>
     </div>
     <div class="opt-group" id="optRadicalWrap">
-      <label><input type="checkbox" id="optRadical" checked /> 繁體加印紅色部首字</label>
+      <strong>繁體部首：</strong>
+      <label><input type="radio" name="radicalColor" value="none" /> 不加印</label>
+      <label><input type="radio" name="radicalColor" value="red" checked /> 紅色</label>
+      <label><input type="radio" name="radicalColor" value="blue" /> 藍色 #00B7EB</label>
     </div>
     <button type="button" class="secondary" id="btnPreview">預覽</button>
     <button type="button" id="btnPrint" disabled>下載 PDF 檔</button>
@@ -566,12 +569,25 @@
         .replace(/"/g, "&quot;");
     }
 
+    function getRadicalColorValue() {
+      const el = document.querySelector('input[name="radicalColor"]:checked');
+      return (el && el.value) || "red";
+    }
+
+    function radicalCssColor(colorKey) {
+      if (colorKey === "blue") return "#00B7EB";
+      if (colorKey === "red") return "#c62828";
+      return null;
+    }
+
     function getOptions() {
       const script = (document.querySelector('input[name="script"]:checked') || {}).value || "trad";
+      const radicalColor = script === "trad" ? getRadicalColorValue() : "none";
       return {
         script,
         showLesson: document.getElementById("optLesson").checked,
-        showRadical: script === "trad" && document.getElementById("optRadical").checked,
+        showRadical: radicalColor === "red" || radicalColor === "blue",
+        radicalColor,
       };
     }
 
@@ -610,6 +626,7 @@
       if (opts.showRadical) {
         const rad = document.createElement("span");
         rad.className = "char-radical";
+        rad.style.color = radicalCssColor(opts.radicalColor) || "#c62828";
         rad.textContent = card.char;
         wrap.appendChild(rad);
       }
@@ -668,14 +685,22 @@
     function syncRadicalOption() {
       const script = (document.querySelector('input[name="script"]:checked') || {}).value;
       const wrap = document.getElementById("optRadicalWrap");
-      wrap.style.opacity = script === "trad" ? "1" : "0.45";
-      document.getElementById("optRadical").disabled = script !== "trad";
+      const disabled = script !== "trad";
+      wrap.style.opacity = disabled ? "0.45" : "1";
+      wrap.querySelectorAll('input[name="radicalColor"]').forEach((el) => {
+        el.disabled = disabled;
+      });
     }
 
     document.querySelectorAll('input[name="script"]').forEach((el) => {
       el.addEventListener("change", () => {
         syncRadicalOption();
         updateSelectStatus();
+      });
+    });
+    document.querySelectorAll('input[name="radicalColor"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        if (document.getElementById("printRoot").children.length) renderPreview();
       });
     });
     // 向量 PDF（字型子集），避免整頁截圖造成檔案過大
@@ -741,7 +766,7 @@
      * 用與預覽完全相同的 DOM／CSS 繪出單字（楷書＋部首），再擷取成圖放入 PDF，
      * 避免 pdf-lib 字型基線與瀏覽器不一致造成錯位／下移。
      */
-    async function captureCharImage(ch, showRadical) {
+    async function captureCharImage(ch, showRadical, radicalColor) {
       const holder = document.createElement("div");
       holder.style.cssText =
         "position:fixed;left:-10000px;top:0;background:transparent;pointer-events:none;";
@@ -759,6 +784,7 @@
       if (showRadical) {
         const rad = document.createElement("span");
         rad.className = "char-radical";
+        rad.style.color = radicalCssColor(radicalColor) || "#c62828";
         rad.textContent = ch;
         wrap.appendChild(rad);
       }
@@ -831,7 +857,7 @@
         for (let i = 0; i < uniqueChars.length; i++) {
           status.textContent = `擷取單字… ${i + 1}/${uniqueChars.length}`;
           const ch = uniqueChars[i];
-          charCache.set(ch, await captureCharImage(ch, opts.showRadical));
+          charCache.set(ch, await captureCharImage(ch, opts.showRadical, opts.radicalColor));
         }
 
         const perPage = CARD_POS.length;
