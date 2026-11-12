@@ -265,8 +265,8 @@
 
   <div class="print-root" id="printRoot"></div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search || "");
     const sheetId = (params.get("sheet_id") || "").trim();
@@ -280,46 +280,47 @@
       [10, 160], [95, 160], [180, 160],
     ];
 
-    /** 切割對齊線：橫線列 y、直線欄 x（mm） */
-    const CROP_Y = [10, 60, 110, 160, 210];
-    const CROP_X = [10, 95, 180, 265];
+    /** 切割對齊線（全部 8mm） */
+    const CROP_EDGE_Y = [10, 60, 110, 160, 210]; // 左右邊橫線的 y
+    const CROP_EDGE_X = [10, 95, 180, 265]; // 上下邊直線的 x
+    const CROP_MID_H = { ys: [60, 100, 160], xs: [91, 176] }; // 中間橫線
+    const CROP_MID_V = { xs: [95, 180], ys: [56, 106, 156] }; // 中間直線
+
+    function addCropH(page, x, y) {
+      const el = document.createElement("div");
+      el.className = "crop-mark h";
+      el.style.left = x + "mm";
+      el.style.top = y + "mm";
+      el.style.width = "8mm";
+      page.appendChild(el);
+    }
+    function addCropV(page, x, y) {
+      const el = document.createElement("div");
+      el.className = "crop-mark v";
+      el.style.left = x + "mm";
+      el.style.top = y + "mm";
+      el.style.height = "8mm";
+      page.appendChild(el);
+    }
 
     function appendCropMarks(page) {
-      // 左邊橫線 8mm：x=0
-      CROP_Y.forEach((y) => {
-        const el = document.createElement("div");
-        el.className = "crop-mark h";
-        el.style.left = "0mm";
-        el.style.top = y + "mm";
-        el.style.width = "8mm";
-        page.appendChild(el);
+      // 左邊橫線 x=6；右邊橫線 x=261
+      CROP_EDGE_Y.forEach((y) => {
+        addCropH(page, 6, y);
+        addCropH(page, 261, y);
       });
-      // 右邊橫線 8mm：x=267（原 265+2）
-      CROP_Y.forEach((y) => {
-        const el = document.createElement("div");
-        el.className = "crop-mark h";
-        el.style.left = "267mm";
-        el.style.top = y + "mm";
-        el.style.width = "8mm";
-        page.appendChild(el);
+      // 上邊直線 y=6；下邊直線 y=206
+      CROP_EDGE_X.forEach((x) => {
+        addCropV(page, x, 6);
+        addCropV(page, x, 206);
       });
-      // 上邊直線 8mm：y=1（原 2−1）
-      CROP_X.forEach((x) => {
-        const el = document.createElement("div");
-        el.className = "crop-mark v";
-        el.style.left = x + "mm";
-        el.style.top = "1mm";
-        el.style.height = "8mm";
-        page.appendChild(el);
+      // 中間橫線
+      CROP_MID_H.ys.forEach((y) => {
+        CROP_MID_H.xs.forEach((x) => addCropH(page, x, y));
       });
-      // 下邊直線 6mm：y=211（原 210+1）
-      CROP_X.forEach((x) => {
-        const el = document.createElement("div");
-        el.className = "crop-mark v";
-        el.style.left = x + "mm";
-        el.style.top = "211mm";
-        el.style.height = "6mm";
-        page.appendChild(el);
+      // 中間直線
+      CROP_MID_V.xs.forEach((x) => {
+        CROP_MID_V.ys.forEach((y) => addCropV(page, x, y));
       });
     }
 
@@ -609,60 +610,184 @@
     document.querySelectorAll('input[name="script"]').forEach((el) => {
       el.addEventListener("change", syncRadicalOption);
     });
+    // 向量 PDF（字型子集），避免整頁截圖造成檔案過大
+    const MM = 72 / 25.4; // mm → PDF point
+    const PAGE_W_MM = 279.4;
+    const PAGE_H_MM = 215.9;
+    const PAGE_W = PAGE_W_MM * MM;
+    const PAGE_H = PAGE_H_MM * MM;
+    const CHAR_SIZE_PT = 135;
+    const LESSON_SIZE_PT = 8;
+    let fontBytesKai = null;
+    let fontBytesRadical = null;
+
+    function mmX(mm) { return mm * MM; }
+    function mmYFromTop(mmFromTop) { return PAGE_H - mmFromTop * MM; }
+
+    async function loadFontBytes(url) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("無法載入字型：" + url);
+      return new Uint8Array(await resp.arrayBuffer());
+    }
+
+    async function ensurePdfFonts(needRadical) {
+      if (!fontBytesKai) {
+        fontBytesKai = await loadFontBytes("fonts/TW-Kai-98_1.ttf");
+      }
+      if (needRadical && !fontBytesRadical) {
+        fontBytesRadical = await loadFontBytes("fonts/ToneOZ-RadicalZ-KaiTraditional.ttf");
+      }
+    }
+
+    function drawCropMarksPdf(page, rgbBlack) {
+      const stroke = { thickness: 0.5, color: rgbBlack };
+      const hLine = (x, y) => {
+        const py = mmYFromTop(y);
+        page.drawLine({ start: { x: mmX(x), y: py }, end: { x: mmX(x + 8), y: py }, ...stroke });
+      };
+      const vLine = (x, y) => {
+        const px = mmX(x);
+        page.drawLine({
+          start: { x: px, y: mmYFromTop(y + 8) },
+          end: { x: px, y: mmYFromTop(y) },
+          ...stroke,
+        });
+      };
+      CROP_EDGE_Y.forEach((y) => {
+        hLine(6, y);
+        hLine(261, y);
+      });
+      CROP_EDGE_X.forEach((x) => {
+        vLine(x, 6);
+        vLine(x, 206);
+      });
+      CROP_MID_H.ys.forEach((y) => {
+        CROP_MID_H.xs.forEach((x) => hLine(x, y));
+      });
+      CROP_MID_V.xs.forEach((x) => {
+        CROP_MID_V.ys.forEach((y) => vLine(x, y));
+      });
+    }
+
+    function drawCenteredChar(page, font, ch, centerXmm, centerYmm, sizePt, color) {
+      const w = font.widthOfTextAtSize(ch, sizePt);
+      const h = font.heightAtSize(sizePt, { descender: true });
+      const x = mmX(centerXmm) - w / 2;
+      // 以字框垂直置中：baseline ≈ 中心 − 高度一半 + descender 補償（heightAtSize 已含）
+      const y = mmYFromTop(centerYmm) - h / 2;
+      page.drawText(ch, { x, y, size: sizePt, font, color });
+    }
+
     async function downloadPdf() {
       const status = document.getElementById("status");
       const btn = document.getElementById("btnPrint");
-      renderPreview();
-      const pages = [...document.querySelectorAll("#printRoot .sheet-page")];
-      if (!pages.length) {
-        status.textContent = "沒有可下載的預覽頁";
+      const opts = getOptions();
+      const cards = buildCards(opts);
+      if (!getSelectedRows().length) {
+        status.textContent = "請先勾選至少一列生字";
         status.classList.add("error");
         return;
       }
-      if (!window.html2canvas || !window.jspdf) {
+      if (!cards.length) {
+        status.textContent = "沒有可印的字（請檢查所選欄位是否有漢字）";
+        status.classList.add("error");
+        return;
+      }
+      if (!window.PDFLib || !window.fontkit) {
         status.textContent = "PDF 套件載入失敗，請重新整理後再試";
         status.classList.add("error");
         return;
       }
+
       btn.disabled = true;
-      const prevText = status.textContent;
       status.classList.remove("error");
-      status.textContent = "產生 PDF 中…";
       try {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "letter" });
-        const pageW = 279.4;
-        const pageH = 215.9;
-        for (let i = 0; i < pages.length; i++) {
-          status.textContent = `產生 PDF 中… ${i + 1}/${pages.length}`;
-          const canvas = await html2canvas(pages[i], {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-            logging: false,
+        status.textContent = "載入字型中（首次較久）…";
+        await ensurePdfFonts(opts.showRadical);
+
+        status.textContent = "產生向量 PDF 中…";
+        const { PDFDocument, rgb } = PDFLib;
+        const pdfDoc = await PDFDocument.create();
+        pdfDoc.registerFontkit(fontkit);
+
+        // subset: true → 只嵌入用到的漢字，檔案接近純文字 PDF
+        const kaiFont = await pdfDoc.embedFont(fontBytesKai, { subset: true });
+        const radicalFont = opts.showRadical
+          ? await pdfDoc.embedFont(fontBytesRadical, { subset: true })
+          : null;
+        const black = rgb(0, 0, 0);
+        const red = rgb(0xC6 / 255, 0x28 / 255, 0x28 / 255);
+
+        const perPage = CARD_POS.length;
+        const pageCount = Math.ceil(cards.length / perPage);
+        const radDxMm = (0.25 * CHAR_SIZE_PT) / (72 / 25.4); // 0.25em
+        const radDyMm = (0.16 * CHAR_SIZE_PT) / (72 / 25.4); // 0.16em 上移
+
+        for (let p = 0; p < pageCount; p++) {
+          status.textContent = `產生向量 PDF 中… ${p + 1}/${pageCount}`;
+          const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+          drawCropMarksPdf(page, black);
+
+          const slice = cards.slice(p * perPage, (p + 1) * perPage);
+          slice.forEach((card, i) => {
+            const [cx, cy] = CARD_POS[i];
+            const midX = cx + 85 / 2;
+            const midY = cy + 50 / 2;
+
+            drawCenteredChar(page, kaiFont, card.char, midX, midY, CHAR_SIZE_PT, black);
+
+            if (radicalFont) {
+              // CSS：translate(+0.25em, -0.16em) → 右移、上移
+              drawCenteredChar(
+                page,
+                radicalFont,
+                card.char,
+                midX + radDxMm,
+                midY - radDyMm,
+                CHAR_SIZE_PT,
+                red
+              );
+            }
+
+            if (opts.showLesson && card.lesson) {
+              const lx = mmX(cx + 70);
+              const ly = mmYFromTop(cy + 40 + LESSON_SIZE_PT * 0.85 / (72 / 25.4));
+              page.drawText(card.lesson, {
+                x: lx,
+                y: ly,
+                size: LESSON_SIZE_PT,
+                font: kaiFont,
+                color: black,
+              });
+            }
           });
-          const img = canvas.toDataURL("image/png");
-          if (i > 0) pdf.addPage("letter", "l");
-          pdf.addImage(img, "PNG", 0, 0, pageW, pageH);
         }
-        const opts = getOptions();
-        const name =
+
+        const pdfBytes = await pdfDoc.save();
+        const blob = new Blob([pdfBytes], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download =
           "字卡_" +
           (opts.script === "simp" ? "簡體" : "繁體") +
           "_" +
           new Date().toISOString().slice(0, 10) +
           ".pdf";
-        pdf.save(name);
-        status.textContent = "已下載 PDF（" + pages.length + " 頁）";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        const kb = Math.max(1, Math.round(pdfBytes.length / 1024));
+        status.textContent = `已下載 PDF（${pageCount} 頁，約 ${kb} KB，向量字型）`;
+        renderPreview();
       } catch (e) {
         console.error(e);
         status.textContent = "下載失敗：" + (e.message || String(e));
         status.classList.add("error");
       } finally {
         btn.disabled = false;
-        if (status.textContent.indexOf("已下載") < 0 && status.textContent.indexOf("失敗") < 0) {
-          status.textContent = prevText;
-        }
       }
     }
 
