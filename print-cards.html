@@ -236,7 +236,7 @@
       <label><input type="checkbox" id="optRadical" checked /> 繁體加印紅色部首字</label>
     </div>
     <button type="button" class="secondary" id="btnPreview">預覽</button>
-    <button type="button" id="btnPrint" disabled>列印</button>
+    <button type="button" id="btnPrint" disabled>下載 PDF 檔</button>
     <span class="status" id="status">載入試算表中…</span>
   </div>
 
@@ -265,6 +265,8 @@
 
   <div class="print-root" id="printRoot"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search || "");
     const sheetId = (params.get("sheet_id") || "").trim();
@@ -607,10 +609,66 @@
     document.querySelectorAll('input[name="script"]').forEach((el) => {
       el.addEventListener("change", syncRadicalOption);
     });
+    async function downloadPdf() {
+      const status = document.getElementById("status");
+      const btn = document.getElementById("btnPrint");
+      renderPreview();
+      const pages = [...document.querySelectorAll("#printRoot .sheet-page")];
+      if (!pages.length) {
+        status.textContent = "沒有可下載的預覽頁";
+        status.classList.add("error");
+        return;
+      }
+      if (!window.html2canvas || !window.jspdf) {
+        status.textContent = "PDF 套件載入失敗，請重新整理後再試";
+        status.classList.add("error");
+        return;
+      }
+      btn.disabled = true;
+      const prevText = status.textContent;
+      status.classList.remove("error");
+      status.textContent = "產生 PDF 中…";
+      try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "letter" });
+        const pageW = 279.4;
+        const pageH = 215.9;
+        for (let i = 0; i < pages.length; i++) {
+          status.textContent = `產生 PDF 中… ${i + 1}/${pages.length}`;
+          const canvas = await html2canvas(pages[i], {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            logging: false,
+          });
+          const img = canvas.toDataURL("image/png");
+          if (i > 0) pdf.addPage("letter", "l");
+          pdf.addImage(img, "PNG", 0, 0, pageW, pageH);
+        }
+        const opts = getOptions();
+        const name =
+          "字卡_" +
+          (opts.script === "simp" ? "簡體" : "繁體") +
+          "_" +
+          new Date().toISOString().slice(0, 10) +
+          ".pdf";
+        pdf.save(name);
+        status.textContent = "已下載 PDF（" + pages.length + " 頁）";
+      } catch (e) {
+        console.error(e);
+        status.textContent = "下載失敗：" + (e.message || String(e));
+        status.classList.add("error");
+      } finally {
+        btn.disabled = false;
+        if (status.textContent.indexOf("已下載") < 0 && status.textContent.indexOf("失敗") < 0) {
+          status.textContent = prevText;
+        }
+      }
+    }
+
     document.getElementById("btnPreview").addEventListener("click", renderPreview);
     document.getElementById("btnPrint").addEventListener("click", () => {
-      renderPreview();
-      window.print();
+      downloadPdf();
     });
     document.getElementById("btnSelectAll").addEventListener("click", () => setAllRowChecks(true));
     document.getElementById("btnSelectNone").addEventListener("click", () => setAllRowChecks(false));
