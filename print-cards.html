@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>印字卡</title>
+  <style>
+    @font-face {
+      font-family: 'TW-Kai-98';
+      src: url('fonts/TW-Kai-98_1.woff2') format('woff2');
+      font-display: block;
+    }
+    @font-face {
+      font-family: 'ToneOZRadicalZKaiTraditional';
+      src: url('fonts/ToneOZ-RadicalZ-KaiTraditional.ttf') format('truetype');
+      font-display: block;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: #f5f5f5;
+      color: #222;
+    }
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      padding: 12px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      align-items: flex-start;
+    }
+    .toolbar h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      width: 100%;
+    }
+    .opt-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      font-size: 0.95rem;
+    }
+    .opt-group label { cursor: pointer; user-select: none; }
+    .toolbar button {
+      font-size: 1rem;
+      padding: 0.45rem 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #2e7d32;
+      color: #fff;
+      cursor: pointer;
+    }
+    .toolbar button.secondary { background: #5b8def; }
+    .toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status { color: #666; font-size: 0.9rem; }
+    .status.error { color: #c62828; }
+
+    .panel {
+      max-width: 960px;
+      margin: 16px auto;
+      padding: 0 16px 32px;
+    }
+    .data-table-wrap {
+      overflow: auto;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e0e0e0;
+      max-height: 280px;
+    }
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    table.data th, table.data td {
+      border-bottom: 1px solid #eee;
+      padding: 6px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.data th { background: #fafafa; position: sticky; top: 0; }
+    .preview-label {
+      margin: 20px 0 8px;
+      font-size: 1rem;
+      color: #555;
+    }
+
+    /* Letter 橫式：11in × 8.5in */
+    .print-root {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+    }
+    .sheet-page {
+      position: relative;
+      width: 279.4mm;
+      height: 215.9mm;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      overflow: hidden;
+    }
+    .card {
+      position: absolute;
+      width: 85mm;
+      height: 50mm;
+      background: #fff;
+      border: 1px solid #000;
+      box-sizing: border-box;
+    }
+    .card-char {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      pointer-events: none;
+    }
+    .char-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      font-size: 135pt;
+    }
+    .char-base {
+      font-family: 'TW-Kai-98', '標楷體', 'DFKai-SB', 'KaiTi', serif;
+      font-size: inherit;
+      font-weight: 400;
+      line-height: 1;
+      color: #000;
+    }
+    .char-radical {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(calc(-50% + 0.25em), calc(-50% - 0.16em));
+      font-family: 'ToneOZRadicalZKaiTraditional', serif;
+      font-size: inherit;
+      font-weight: 400;
+      line-height: 1;
+      color: #c62828;
+      pointer-events: none;
+    }
+    /* 課次：相對字卡右下角（x+70mm、y+40mm） */
+    .card-lesson {
+      position: absolute;
+      left: 70mm;
+      top: 40mm;
+      font-size: 8pt;
+      line-height: 1;
+      color: #000;
+      white-space: nowrap;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .toolbar, .panel-screen { display: none !important; }
+      .print-root { gap: 0; }
+      .sheet-page {
+        box-shadow: none;
+        page-break-after: always;
+        break-after: page;
+      }
+      .sheet-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      @page {
+        size: letter landscape;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>印字卡</h1>
+    <div class="opt-group" id="optScript">
+      <strong>字體：</strong>
+      <label><input type="radio" name="script" value="trad" checked /> 繁體（B 欄）</label>
+      <label><input type="radio" name="script" value="simp" /> 簡體（D 欄）</label>
+    </div>
+    <div class="opt-group">
+      <label><input type="checkbox" id="optLesson" checked /> 課次印在字卡右下角</label>
+    </div>
+    <div class="opt-group" id="optRadicalWrap">
+      <label><input type="checkbox" id="optRadical" checked /> 繁體加印紅色部首字</label>
+    </div>
+    <button type="button" class="secondary" id="btnPreview">預覽</button>
+    <button type="button" id="btnPrint" disabled>列印</button>
+    <span class="status" id="status">載入試算表中…</span>
+  </div>
+
+  <div class="panel panel-screen">
+    <div class="data-table-wrap">
+      <table class="data">
+        <thead>
+          <tr><th>列</th><th>A 課次</th><th>B 繁體</th><th>D 簡體</th></tr>
+        </thead>
+        <tbody id="dataBody">
+          <tr><td colspan="4">載入中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="preview-label">預覽（Letter 橫式，每頁 3×4＝12 字）</div>
+  </div>
+
+  <div class="print-root" id="printRoot"></div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search || "");
+    const sheetId = (params.get("sheet_id") || "").trim();
+    const gid = (params.get("gid") || "0").trim() || "0";
+
+    /** 字卡位置（mm）：左上角 */
+    const CARD_POS = [
+      [10, 10], [95, 10], [180, 10],
+      [10, 60], [95, 60], [180, 60],
+      [10, 110], [95, 110], [180, 110],
+      [10, 160], [95, 160], [180, 160],
+    ];
+
+    let sheetRows = []; // { rowNum, lesson, trad, simp }
+
+    function gvizCellText(cell) {
+      if (!cell) return "";
+      if (cell.f != null && String(cell.f).trim() !== "") return String(cell.f);
+      if (cell.v == null) return "";
+      return String(cell.v);
+    }
+
+    function tablePayloadToRows(payload) {
+      const table = payload.table || {};
+      const cols = table.cols || [];
+      const labels = cols.map((c) => String((c && c.label) || "").trim());
+      const hasRealLabels = labels.some((l) => l && !/^[A-Z]{1,3}$/.test(l));
+      const body = (table.rows || []).map((row) => {
+        const cells = row.c || [];
+        const out = [];
+        for (let i = 0; i < cols.length; i++) out.push(gvizCellText(cells[i]));
+        return out;
+      });
+      return hasRealLabels ? [labels].concat(body) : body;
+    }
+
+    function fetchAbd(sheetIdVal, gidVal) {
+      return new Promise((resolve, reject) => {
+        const cbName = "__printCardsCb_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
+        const script = document.createElement("script");
+        let done = false;
+        const timer = setTimeout(() => finish(new Error("載入逾時")), 25000);
+        function finish(err, rows) {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+          if (script.parentNode) script.parentNode.removeChild(script);
+          if (err) reject(err);
+          else resolve(rows);
+        }
+        window[cbName] = (payload) => {
+          try { finish(null, tablePayloadToRows(payload)); }
+          catch (e) { finish(e); }
+        };
+        script.onerror = () => finish(new Error("無法載入試算表"));
+        script.src =
+          "https://docs.google.com/spreadsheets/d/" +
+          encodeURIComponent(sheetIdVal) +
+          "/gviz/tq?tqx=responseHandler:" +
+          cbName +
+          ";out:json&gid=" +
+          encodeURIComponent(gidVal || "0") +
+          "&tq=" +
+          encodeURIComponent("select A, B, D") +
+          "&t=" +
+          Date.now();
+        document.head.appendChild(script);
+      });
+    }
+
+    function isHanChar(ch) {
+      if (!ch) return false;
+      const cp = ch.codePointAt(0);
+      return (cp >= 0x4e00 && cp <= 0x9fff) ||
+        (cp >= 0x3400 && cp <= 0x4dbf) ||
+        (cp >= 0x20000 && cp <= 0x2ceaf);
+    }
+
+    /** 依序取出漢字（含 IVS），同列去重且保序 */
+    function extractUniqueHan(text) {
+      const s = String(text || "");
+      const out = [];
+      const seen = new Set();
+      for (let i = 0; i < s.length; ) {
+        const cp = s.codePointAt(i);
+        const ch = String.fromCodePoint(cp);
+        i += ch.length;
+        if (!isHanChar(ch)) continue;
+        let full = ch;
+        if (i < s.length) {
+          const vs = s.codePointAt(i);
+          if ((vs >= 0xfe00 && vs <= 0xfe0f) || (vs >= 0xe0100 && vs <= 0xe01ef)) {
+            full += String.fromCodePoint(vs);
+            i += String.fromCodePoint(vs).length;
+          }
+        }
+        if (seen.has(full)) continue;
+        seen.add(full);
+        out.push(full);
+      }
+      return out;
+    }
+
+    function parseAbdRows(rawRows) {
+      const rows = rawRows || [];
+      if (!rows.length) return [];
+      const out = [];
+      // 第 1 列標題，從第 2 列起
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i] || [];
+        const lesson = String(r[0] != null ? r[0] : "").trim();
+        const trad = String(r[1] != null ? r[1] : "").trim();
+        const simp = String(r[2] != null ? r[2] : "").trim();
+        if (!lesson && !trad && !simp) continue;
+        out.push({ rowNum: i + 1, lesson, trad, simp });
+      }
+      return out;
+    }
+
+    function renderDataTable() {
+      const body = document.getElementById("dataBody");
+      if (!sheetRows.length) {
+        body.innerHTML = '<tr><td colspan="4">沒有資料列（請確認 A／B／D 欄有內容，且第 1 列為標題）</td></tr>';
+        return;
+      }
+      body.innerHTML = sheetRows.map((r) =>
+        `<tr>
+          <td>${r.rowNum}</td>
+          <td>${escapeHtml(r.lesson)}</td>
+          <td>${escapeHtml(r.trad)}</td>
+          <td>${escapeHtml(r.simp)}</td>
+        </tr>`
+      ).join("");
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function getOptions() {
+      const script = (document.querySelector('input[name="script"]:checked') || {}).value || "trad";
+      return {
+        script,
+        showLesson: document.getElementById("optLesson").checked,
+        showRadical: script === "trad" && document.getElementById("optRadical").checked,
+      };
+    }
+
+    function buildCards(opts) {
+      const cards = [];
+      for (const row of sheetRows) {
+        const raw = opts.script === "simp" ? row.simp : row.trad;
+        const chars = extractUniqueHan(raw);
+        for (const ch of chars) {
+          cards.push({ char: ch, lesson: row.lesson });
+        }
+      }
+      return cards;
+    }
+
+    function makeCardEl(card, xMm, yMm, opts) {
+      const el = document.createElement("div");
+      el.className = "card";
+      el.style.left = xMm + "mm";
+      el.style.top = yMm + "mm";
+
+      const charBox = document.createElement("div");
+      charBox.className = "card-char";
+      const wrap = document.createElement("span");
+      wrap.className = "char-wrap";
+      const base = document.createElement("span");
+      base.className = "char-base";
+      base.textContent = card.char;
+      wrap.appendChild(base);
+      if (opts.showRadical) {
+        const rad = document.createElement("span");
+        rad.className = "char-radical";
+        rad.textContent = card.char;
+        wrap.appendChild(rad);
+      }
+      charBox.appendChild(wrap);
+      el.appendChild(charBox);
+
+      if (opts.showLesson && card.lesson) {
+        const lesson = document.createElement("div");
+        lesson.className = "card-lesson";
+        lesson.textContent = card.lesson;
+        el.appendChild(lesson);
+      }
+      return el;
+    }
+
+    function renderPreview() {
+      const opts = getOptions();
+      const cards = buildCards(opts);
+      const root = document.getElementById("printRoot");
+      root.innerHTML = "";
+      const status = document.getElementById("status");
+      const btnPrint = document.getElementById("btnPrint");
+
+      if (!cards.length) {
+        status.textContent = "沒有可印的字（請檢查所選欄位是否有漢字）";
+        status.classList.add("error");
+        btnPrint.disabled = true;
+        return;
+      }
+
+      const perPage = CARD_POS.length;
+      const pageCount = Math.ceil(cards.length / perPage);
+      for (let p = 0; p < pageCount; p++) {
+        const page = document.createElement("div");
+        page.className = "sheet-page";
+        const slice = cards.slice(p * perPage, (p + 1) * perPage);
+        slice.forEach((card, i) => {
+          const [x, y] = CARD_POS[i];
+          page.appendChild(makeCardEl(card, x, y, opts));
+        });
+        root.appendChild(page);
+      }
+
+      status.classList.remove("error");
+      status.textContent = `共 ${cards.length} 字、${pageCount} 頁（${opts.script === "simp" ? "簡體" : "繁體"}）`;
+      btnPrint.disabled = false;
+    }
+
+    function syncRadicalOption() {
+      const script = (document.querySelector('input[name="script"]:checked') || {}).value;
+      const wrap = document.getElementById("optRadicalWrap");
+      wrap.style.opacity = script === "trad" ? "1" : "0.45";
+      document.getElementById("optRadical").disabled = script !== "trad";
+    }
+
+    document.querySelectorAll('input[name="script"]').forEach((el) => {
+      el.addEventListener("change", syncRadicalOption);
+    });
+    document.getElementById("btnPreview").addEventListener("click", renderPreview);
+    document.getElementById("btnPrint").addEventListener("click", () => {
+      renderPreview();
+      window.print();
+    });
+
+    (async function init() {
+      const status = document.getElementById("status");
+      if (!sheetId) {
+        status.textContent = "缺少 sheet_id，請從閱讀頁按「印字卡」開啟";
+        status.classList.add("error");
+        document.getElementById("dataBody").innerHTML =
+          '<tr><td colspan="4">未指定試算表</td></tr>';
+        return;
+      }
+      try {
+        const raw = await fetchAbd(sheetId, gid);
+        sheetRows = parseAbdRows(raw);
+        renderDataTable();
+        syncRadicalOption();
+        status.classList.remove("error");
+        status.textContent = `已載入 ${sheetRows.length} 列資料，選好選項後按「預覽」`;
+        renderPreview();
+      } catch (err) {
+        console.error(err);
+        status.textContent = "試算表載入失敗：請確認已設為「知道連結的任何人可檢視」";
+        status.classList.add("error");
+        document.getElementById("dataBody").innerHTML =
+          '<tr><td colspan="4">載入失敗</td></tr>';
+      }
+    })();
+  </script>
+</body>
+</html>

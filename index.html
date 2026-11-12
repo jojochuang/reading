@@ -166,12 +166,22 @@
     }
     .controls {
       margin-top: 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
     }
     .controls-lesson {
       margin-top: 0.35rem;
     }
     .controls-lesson button {
       background-color: #5b8def;
+    }
+    .controls .sentence-index {
+      font-size: 1.2rem;
+      color: #888;
+      margin: 0.5rem 0.25rem 0.5rem 0.5rem;
+      white-space: nowrap;
     }
     button {
       font-size: 1.2rem;
@@ -241,16 +251,6 @@
       padding: 10px 20px;
       border-radius: 20px;
       font-size: 1rem;
-    }
-    .sentence-index {
-      font-size: 1.2rem;
-      color: #888;
-      margin-top: 0.5rem;
-    }
-    .end-indicator {
-      font-size: 1.5rem;
-      color: #888;
-      margin-top: 1rem;
     }
     .char.has-stroke {
       background: #fffacd; /* 淡黃色代表有筆順圖 */
@@ -438,11 +438,10 @@
     </div>
   </div>
 
-  <div class="sentence-index" id="sentence-index"></div>
   <div class="sentence" id="sentence"></div>
-  <div class="end-indicator" id="end-indicator"></div>
 
   <div class="controls">
+    <span class="sentence-index" id="sentence-index"></span>
     <button onclick="prevSentence()">⬅️ 上一句</button>
     <button onclick="playAudio()">🔊 播放語音</button>
     <button onclick="nextSentence()">➡️ 下一句</button>
@@ -451,6 +450,7 @@
   <div class="controls controls-lesson">
     <button type="button" onclick="prevLesson()">⬅️ 上一課</button>
     <button type="button" onclick="nextLesson()">➡️ 下一課</button>
+    <button type="button" onclick="openPrintCards()" style="background:#2e7d32;">印字卡</button>
   </div>
 
   <div id="fullscreen-view">
@@ -535,7 +535,6 @@
     const lessonSelect = document.getElementById("lesson-select");
     const sentenceContainer = document.getElementById("sentence");
     const sentenceIndexContainer = document.getElementById("sentence-index");
-    const endIndicator = document.getElementById("end-indicator");
     const fullscreenView = document.getElementById("fullscreen-view");
     const fullscreenImg = document.getElementById("fullscreen-img");
     const sourceTag = document.getElementById("sourceTag");
@@ -1233,6 +1232,17 @@
       goToLessonByIndex(i + 1);
     }
 
+    function openPrintCards() {
+      if (!currentSheetId) {
+        alert("請先載入試算表");
+        return;
+      }
+      const q = new URLSearchParams();
+      q.set("sheet_id", currentSheetId);
+      q.set("gid", currentGid || "0");
+      window.open("print-cards.html?" + q.toString(), "_blank", "noopener,noreferrer");
+    }
+
     function initCustomSheetPanel() {
       const panel = document.getElementById("customSheetPanel");
       const openBtn = document.getElementById("btnCustomSheet");
@@ -1611,7 +1621,6 @@
       const sentence = sentences[current];
       sentenceContainer.innerHTML = '';
       sentenceIndexContainer.textContent = `第 ${current + 1} 句 / 共 ${sentences.length} 句`;
-      endIndicator.textContent = (current === sentences.length - 1) ? '📚 課文已經結束' : '';
       if (!sentence) return;
 
       const chars = Array.from(sentence);
