@@ -488,8 +488,8 @@
         title: "字圖清單｜全部",
       },
       {
-        id: "18VNo2yeCM9x_IVds85WkIV2ueyKc-IAj60UNvOglGxM",
-        gid: "213765597",
+        id: "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc",
+        gid: "1085808977",
         title: "字圖清單｜美洲一冊",
       },
       {
@@ -518,8 +518,9 @@
         title: "字圖清單｜TK",
       },
     ];
-    // 美洲二～五：一列一課。B＝第一句，C+D＝第二句。美洲一與其他試算表不走這條
+    // 美洲一～五：一列一課。B＝第一句，C+D＝第二句（與美洲二相同讀取／顯示）
     const AMERICA_BCD_SHEET_KEYS = new Set([
+      "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1085808977",
       "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1601198504",
       "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1424562399",
       "1MxROi0vIZ2Dk1doq3jJWlP28_t2R7j7q8N4h1YCs8Qc::1127835491",
@@ -882,7 +883,7 @@
       return title;
     }
 
-    /** 美洲二～五：A＝課名，B＝第一句，C 與 D 接成第二句 */
+    /** 美洲一～五：A＝課名，B＝第一句，C 與 D 接成第二句 */
     function applyAmericaBcdLessons(rows) {
       lessonTitles = [];
       lessonColIndexes = [];
