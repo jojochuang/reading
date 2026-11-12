@@ -125,8 +125,33 @@
       width: 85mm;
       height: 50mm;
       background: #fff;
-      border: 1px solid #000;
+      border: none;
       box-sizing: border-box;
+    }
+    table.data th.col-check,
+    table.data td.col-check {
+      width: 2.2em;
+      text-align: center;
+    }
+    table.data tr.row-selected {
+      background: #e8f5e9;
+    }
+    .row-select-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 0.92rem;
+    }
+    .row-select-bar button {
+      font-size: 0.9rem;
+      padding: 0.3rem 0.75rem;
+      border: none;
+      border-radius: 6px;
+      background: #5b8def;
+      color: #fff;
+      cursor: pointer;
     }
     .card-char {
       position: absolute;
@@ -216,13 +241,22 @@
   </div>
 
   <div class="panel panel-screen">
+    <div class="row-select-bar">
+      <span>生字列：</span>
+      <button type="button" id="btnSelectAll">全選</button>
+      <button type="button" id="btnSelectNone">全不選</button>
+      <span class="status" id="selectStatus"></span>
+    </div>
     <div class="data-table-wrap">
       <table class="data">
         <thead>
-          <tr><th>列</th><th>A 課次</th><th>B 繁體</th><th>E 簡體</th></tr>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="checkAll" title="全選／全不選" /></th>
+            <th>列</th><th>A 課次</th><th>B 繁體</th><th>E 簡體</th>
+          </tr>
         </thead>
         <tbody id="dataBody">
-          <tr><td colspan="4">載入中…</td></tr>
+          <tr><td colspan="5">載入中…</td></tr>
         </tbody>
       </table>
     </div>
@@ -258,30 +292,30 @@
         el.style.width = "8mm";
         page.appendChild(el);
       });
-      // 右邊橫線 8mm：x=265
+      // 右邊橫線 8mm：x=267（原 265+2）
       CROP_Y.forEach((y) => {
         const el = document.createElement("div");
         el.className = "crop-mark h";
-        el.style.left = "265mm";
+        el.style.left = "267mm";
         el.style.top = y + "mm";
         el.style.width = "8mm";
         page.appendChild(el);
       });
-      // 上邊直線 8mm：y=2
+      // 上邊直線 8mm：y=1（原 2−1）
       CROP_X.forEach((x) => {
         const el = document.createElement("div");
         el.className = "crop-mark v";
         el.style.left = x + "mm";
-        el.style.top = "2mm";
+        el.style.top = "1mm";
         el.style.height = "8mm";
         page.appendChild(el);
       });
-      // 下邊直線 6mm：y=210
+      // 下邊直線 6mm：y=211（原 210+1）
       CROP_X.forEach((x) => {
         const el = document.createElement("div");
         el.className = "crop-mark v";
         el.style.left = x + "mm";
-        el.style.top = "210mm";
+        el.style.top = "211mm";
         el.style.height = "6mm";
         page.appendChild(el);
       });
@@ -394,20 +428,71 @@
       return out;
     }
 
+    function updateSelectStatus() {
+      const boxes = [...document.querySelectorAll(".row-check")];
+      const n = boxes.filter((b) => b.checked).length;
+      const el = document.getElementById("selectStatus");
+      if (el) el.textContent = boxes.length ? `已選 ${n} / ${boxes.length} 列` : "";
+      const all = document.getElementById("checkAll");
+      if (all && boxes.length) {
+        all.checked = n === boxes.length;
+        all.indeterminate = n > 0 && n < boxes.length;
+      }
+    }
+
+    function setAllRowChecks(checked) {
+      document.querySelectorAll(".row-check").forEach((b) => {
+        b.checked = checked;
+        const tr = b.closest("tr");
+        if (tr) tr.classList.toggle("row-selected", checked);
+      });
+      updateSelectStatus();
+    }
+
+    function getSelectedRows() {
+      const selected = new Set(
+        [...document.querySelectorAll(".row-check:checked")].map((b) => b.value)
+      );
+      if (!selected.size) return [];
+      return sheetRows.filter((r) => selected.has(String(r.rowNum)));
+    }
+
     function renderDataTable() {
       const body = document.getElementById("dataBody");
       if (!sheetRows.length) {
-        body.innerHTML = '<tr><td colspan="4">沒有資料列（請確認 A／B／E 欄有內容，且第 1 列為標題）</td></tr>';
+        body.innerHTML = '<tr><td colspan="5">沒有資料列（請確認 A／B／E 欄有內容，且第 1 列為標題）</td></tr>';
+        updateSelectStatus();
         return;
       }
       body.innerHTML = sheetRows.map((r) =>
-        `<tr>
+        `<tr class="row-selected" data-row="${r.rowNum}">
+          <td class="col-check"><input type="checkbox" class="row-check" value="${r.rowNum}" checked /></td>
           <td>${r.rowNum}</td>
           <td>${escapeHtml(r.lesson)}</td>
           <td>${escapeHtml(r.trad)}</td>
           <td>${escapeHtml(r.simp)}</td>
         </tr>`
       ).join("");
+      body.querySelectorAll(".row-check").forEach((box) => {
+        box.addEventListener("change", () => {
+          const tr = box.closest("tr");
+          if (tr) tr.classList.toggle("row-selected", box.checked);
+          updateSelectStatus();
+        });
+      });
+      body.querySelectorAll("tr[data-row]").forEach((tr) => {
+        tr.addEventListener("click", (e) => {
+          if (e.target.closest("input")) return;
+          const box = tr.querySelector(".row-check");
+          if (!box) return;
+          box.checked = !box.checked;
+          tr.classList.toggle("row-selected", box.checked);
+          updateSelectStatus();
+        });
+      });
+      const checkAll = document.getElementById("checkAll");
+      if (checkAll) checkAll.checked = true;
+      updateSelectStatus();
     }
 
     function escapeHtml(s) {
@@ -429,7 +514,8 @@
 
     function buildCards(opts) {
       const cards = [];
-      for (const row of sheetRows) {
+      const rows = getSelectedRows();
+      for (const row of rows) {
         const raw = opts.script === "simp" ? row.simp : row.trad;
         const chars = extractUniqueHan(raw);
         for (const ch of chars) {
@@ -479,6 +565,12 @@
       const status = document.getElementById("status");
       const btnPrint = document.getElementById("btnPrint");
 
+      if (!getSelectedRows().length) {
+        status.textContent = "請先勾選至少一列生字";
+        status.classList.add("error");
+        btnPrint.disabled = true;
+        return;
+      }
       if (!cards.length) {
         status.textContent = "沒有可印的字（請檢查所選欄位是否有漢字）";
         status.classList.add("error");
@@ -520,6 +612,11 @@
       renderPreview();
       window.print();
     });
+    document.getElementById("btnSelectAll").addEventListener("click", () => setAllRowChecks(true));
+    document.getElementById("btnSelectNone").addEventListener("click", () => setAllRowChecks(false));
+    document.getElementById("checkAll").addEventListener("change", (e) => {
+      setAllRowChecks(!!e.target.checked);
+    });
 
     (async function init() {
       const status = document.getElementById("status");
@@ -527,7 +624,7 @@
         status.textContent = "缺少 sheet_id，請從閱讀頁按「印字卡」開啟";
         status.classList.add("error");
         document.getElementById("dataBody").innerHTML =
-          '<tr><td colspan="4">未指定試算表</td></tr>';
+          '<tr><td colspan="5">未指定試算表</td></tr>';
         return;
       }
       try {
@@ -536,14 +633,14 @@
         renderDataTable();
         syncRadicalOption();
         status.classList.remove("error");
-        status.textContent = `已載入 ${sheetRows.length} 列資料，選好選項後按「預覽」`;
+        status.textContent = `已載入 ${sheetRows.length} 列資料，勾選要印的列後按「預覽」`;
         renderPreview();
       } catch (err) {
         console.error(err);
         status.textContent = "試算表載入失敗：請確認已設為「知道連結的任何人可檢視」";
         status.classList.add("error");
         document.getElementById("dataBody").innerHTML =
-          '<tr><td colspan="4">載入失敗</td></tr>';
+          '<tr><td colspan="5">載入失敗</td></tr>';
       }
     })();
   </script>
