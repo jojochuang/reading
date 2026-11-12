@@ -125,7 +125,7 @@
       width: 85mm;
       height: 50mm;
       background: #fff;
-      border: none;
+      border: 1px solid #000; /* 暫時顯示，確認裁切安全後再拿掉 */
       box-sizing: border-box;
     }
     table.data th.col-check,
@@ -669,13 +669,38 @@
       });
     }
 
-    function drawCenteredChar(page, font, ch, centerXmm, centerYmm, sizePt, color) {
-      const w = font.widthOfTextAtSize(ch, sizePt);
-      const h = font.heightAtSize(sizePt, { descender: true });
-      const x = mmX(centerXmm) - w / 2;
-      // 以字框垂直置中：baseline ≈ 中心 − 高度一半 + descender 補償（heightAtSize 已含）
-      const y = mmYFromTop(centerYmm) - h / 2;
-      page.drawText(ch, { x, y, size: sizePt, font, color });
+    /**
+     * 與網頁預覽一致：楷書／部首共用「同一條」baseline（只用楷書度量計算），
+     * 再依 CSS translate(+0.25em, -0.16em) 平移部首。
+     * 先前各自 heightAtSize 置中 → 兩字型錯開；baseline 算錯 → 整字下移。
+     */
+    function drawCardChars(page, kaiFont, radicalFont, ch, midXmm, midYmm, sizePt, black, red) {
+      const centerPdfY = mmYFromTop(midYmm);
+      // 以楷書墨盒垂直置中，求出共用 baseline
+      const ascent = kaiFont.heightAtSize(sizePt);
+      const totalH = kaiFont.heightAtSize(sizePt, { descender: true });
+      const descent = totalH - ascent;
+      const baseline = centerPdfY - (ascent - descent) / 2;
+
+      const kaiW = kaiFont.widthOfTextAtSize(ch, sizePt);
+      page.drawText(ch, {
+        x: mmX(midXmm) - kaiW / 2,
+        y: baseline,
+        size: sizePt,
+        font: kaiFont,
+        color: black,
+      });
+
+      if (radicalFont) {
+        const radW = radicalFont.widthOfTextAtSize(ch, sizePt);
+        page.drawText(ch, {
+          x: mmX(midXmm) - radW / 2 + 0.25 * sizePt,
+          y: baseline + 0.16 * sizePt,
+          size: sizePt,
+          font: radicalFont,
+          color: red,
+        });
+      }
     }
 
     async function downloadPdf() {
@@ -720,8 +745,6 @@
 
         const perPage = CARD_POS.length;
         const pageCount = Math.ceil(cards.length / perPage);
-        const radDxMm = (0.25 * CHAR_SIZE_PT) / (72 / 25.4); // 0.25em
-        const radDyMm = (0.16 * CHAR_SIZE_PT) / (72 / 25.4); // 0.16em 上移
 
         for (let p = 0; p < pageCount; p++) {
           status.textContent = `產生向量 PDF 中… ${p + 1}/${pageCount}`;
@@ -734,24 +757,31 @@
             const midX = cx + 85 / 2;
             const midY = cy + 50 / 2;
 
-            drawCenteredChar(page, kaiFont, card.char, midX, midY, CHAR_SIZE_PT, black);
+            // 暫時顯示字卡黑框（確認裁切安全後再移除）
+            page.drawRectangle({
+              x: mmX(cx),
+              y: mmYFromTop(cy + 50),
+              width: mmX(85),
+              height: mmX(50),
+              borderWidth: 0.5,
+              borderColor: black,
+            });
 
-            if (radicalFont) {
-              // CSS：translate(+0.25em, -0.16em) → 右移、上移
-              drawCenteredChar(
-                page,
-                radicalFont,
-                card.char,
-                midX + radDxMm,
-                midY - radDyMm,
-                CHAR_SIZE_PT,
-                red
-              );
-            }
+            drawCardChars(
+              page,
+              kaiFont,
+              radicalFont,
+              card.char,
+              midX,
+              midY,
+              CHAR_SIZE_PT,
+              black,
+              red
+            );
 
             if (opts.showLesson && card.lesson) {
               const lx = mmX(cx + 70);
-              const ly = mmYFromTop(cy + 40 + LESSON_SIZE_PT * 0.85 / (72 / 25.4));
+              const ly = mmYFromTop(cy + 40) - LESSON_SIZE_PT * 0.8;
               page.drawText(card.lesson, {
                 x: lx,
                 y: ly,
