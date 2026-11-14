@@ -128,6 +128,27 @@
       border: none;
       box-sizing: border-box;
     }
+    .card-image-inner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card-image-inner img {
+      max-width: 70mm;
+      max-height: 40mm;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      transform: rotate(180deg);
+      display: block;
+    }
+    .card-image-missing {
+      font-size: 10pt;
+      color: #999;
+      transform: rotate(180deg);
+    }
     table.data th.col-check,
     table.data td.col-check {
       width: 2.2em;
@@ -265,6 +286,11 @@
       <label><input type="radio" name="radicalColor" value="red" checked /> 紅色</label>
       <label><input type="radio" name="radicalColor" value="blue" /> 藍色 #00B7EB</label>
     </div>
+    <div class="opt-group" id="optLayoutWrap">
+      <strong>排版：</strong>
+      <label><input type="radio" name="cardLayout" value="text" checked /> 僅文字（12 字／頁）</label>
+      <label><input type="radio" name="cardLayout" value="fold" /> 字＋背面圖對折（6 字 6 圖／頁）</label>
+    </div>
     <button type="button" class="secondary" id="btnPreview">預覽</button>
     <button type="button" id="btnPrint" disabled>下載 PDF 檔</button>
     <span class="status" id="status">載入試算表中…</span>
@@ -291,7 +317,7 @@
         </tbody>
       </table>
     </div>
-    <div class="preview-label">預覽（Letter 橫式，每頁 3×4＝12 字）</div>
+    <div class="preview-label" id="previewLabel">預覽（Letter 橫式，每頁 3×4＝12 字）</div>
   </div>
 
   <div class="print-root" id="printRoot"></div>
@@ -304,13 +330,24 @@
     const sheetId = (params.get("sheet_id") || "").trim();
     const gid = (params.get("gid") || "0").trim() || "0";
 
-    /** 字卡位置（mm）：左上角 */
+    /** 字卡位置（mm）：左上角 — 僅文字 12 格 */
     const CARD_POS = [
       [10, 10], [95, 10], [180, 10],
       [10, 60], [95, 60], [180, 60],
       [10, 110], [95, 110], [180, 110],
       [10, 160], [95, 160], [180, 160],
     ];
+    /** 對折版：第 1／3 排放字，第 2／4 排放上下顛倒的對應圖 */
+    const FOLD_CHAR_POS = [
+      [10, 10], [95, 10], [180, 10],
+      [10, 110], [95, 110], [180, 110],
+    ];
+    const FOLD_IMG_POS = [
+      [10, 60], [95, 60], [180, 60],
+      [10, 160], [95, 160], [180, 160],
+    ];
+    const IMG_MAX_W_MM = 70;
+    const IMG_MAX_H_MM = 40;
 
     /** 切割對齊線（全部 8mm） */
     const CROP_EDGE_Y = [10, 60, 110, 160, 210]; // 左右邊橫線的 y
@@ -583,12 +620,52 @@
     function getOptions() {
       const script = (document.querySelector('input[name="script"]:checked') || {}).value || "trad";
       const radicalColor = script === "trad" ? getRadicalColorValue() : "none";
+      const layoutEl = document.querySelector('input[name="cardLayout"]:checked');
       return {
         script,
         showLesson: document.getElementById("optLesson").checked,
         showRadical: radicalColor === "red" || radicalColor === "blue",
         radicalColor,
+        layout: (layoutEl && layoutEl.value) || "text", // text | fold
       };
+    }
+
+    function getBaseChar(ch) {
+      if (!ch) return "";
+      const cp = ch.codePointAt(0);
+      return String.fromCodePoint(cp);
+    }
+
+    function charImageUrls(ch) {
+      const base = getBaseChar(ch);
+      return [
+        `${base}1.JPEG`,
+        `${base}1.jpeg`,
+        `Character/${encodeURIComponent(base)}.png`,
+      ];
+    }
+
+    function loadHtmlImage(url) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
+    }
+
+    async function resolveCharImage(ch) {
+      for (const url of charImageUrls(ch)) {
+        const img = await loadHtmlImage(url);
+        if (img && img.naturalWidth > 0) return { img, url };
+      }
+      return null;
+    }
+
+    function fitImageMm(natW, natH, maxW, maxH) {
+      if (!natW || !natH) return { w: maxW, h: maxH };
+      const s = Math.min(maxW / natW, maxH / natH);
+      return { w: natW * s, h: natH * s };
     }
 
     function buildCards(opts) {
@@ -642,8 +719,39 @@
       return el;
     }
 
-    function renderPreview() {
+    function makeImageCardEl(card, xMm, yMm, resolved) {
+      const el = document.createElement("div");
+      el.className = "card";
+      el.style.left = xMm + "mm";
+      el.style.top = yMm + "mm";
+      const inner = document.createElement("div");
+      inner.className = "card-image-inner";
+      if (resolved && resolved.url) {
+        const img = document.createElement("img");
+        img.src = resolved.url;
+        img.alt = card.char;
+        inner.appendChild(img);
+      } else {
+        const miss = document.createElement("span");
+        miss.className = "card-image-missing";
+        miss.textContent = "無圖：" + card.char;
+        inner.appendChild(miss);
+      }
+      el.appendChild(inner);
+      return el;
+    }
+
+    function updatePreviewLabel(opts) {
+      const el = document.getElementById("previewLabel");
+      if (!el) return;
+      el.textContent = opts.layout === "fold"
+        ? "預覽（對折：第 1／3 排字，第 2／4 排顛倒圖；每頁 6 字 6 圖）"
+        : "預覽（Letter 橫式，每頁 3×4＝12 字）";
+    }
+
+    async function renderPreview() {
       const opts = getOptions();
+      updatePreviewLabel(opts);
       const cards = buildCards(opts);
       const root = document.getElementById("printRoot");
       root.innerHTML = "";
@@ -663,22 +771,44 @@
         return;
       }
 
-      const perPage = CARD_POS.length;
+      const fold = opts.layout === "fold";
+      const perPage = fold ? FOLD_CHAR_POS.length : CARD_POS.length;
       const pageCount = Math.ceil(cards.length / perPage);
+
+      // 對折版預先解析圖片
+      const imgMap = new Map();
+      if (fold) {
+        const uniq = [...new Set(cards.map((c) => c.char))];
+        for (let i = 0; i < uniq.length; i++) {
+          status.textContent = `載入背面圖… ${i + 1}/${uniq.length}`;
+          imgMap.set(uniq[i], await resolveCharImage(uniq[i]));
+        }
+      }
+
       for (let p = 0; p < pageCount; p++) {
         const page = document.createElement("div");
         page.className = "sheet-page";
         appendCropMarks(page);
         const slice = cards.slice(p * perPage, (p + 1) * perPage);
-        slice.forEach((card, i) => {
-          const [x, y] = CARD_POS[i];
-          page.appendChild(makeCardEl(card, x, y, opts));
-        });
+        if (fold) {
+          slice.forEach((card, i) => {
+            const [cx, cy] = FOLD_CHAR_POS[i];
+            page.appendChild(makeCardEl(card, cx, cy, opts));
+            const [ix, iy] = FOLD_IMG_POS[i];
+            page.appendChild(makeImageCardEl(card, ix, iy, imgMap.get(card.char)));
+          });
+        } else {
+          slice.forEach((card, i) => {
+            const [x, y] = CARD_POS[i];
+            page.appendChild(makeCardEl(card, x, y, opts));
+          });
+        }
         root.appendChild(page);
       }
 
       status.classList.remove("error");
-      status.textContent = `共 ${cards.length} 字、${pageCount} 頁（${opts.script === "simp" ? "簡體" : "繁體"}）`;
+      const layoutNote = fold ? "對折版" : "僅文字";
+      status.textContent = `共 ${cards.length} 字、${pageCount} 頁（${opts.script === "simp" ? "簡體" : "繁體"}・${layoutNote}）`;
       btnPrint.disabled = false;
     }
 
@@ -699,6 +829,11 @@
       });
     });
     document.querySelectorAll('input[name="radicalColor"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        if (document.getElementById("printRoot").children.length) renderPreview();
+      });
+    });
+    document.querySelectorAll('input[name="cardLayout"]').forEach((el) => {
       el.addEventListener("change", () => {
         if (document.getElementById("printRoot").children.length) renderPreview();
       });
@@ -851,36 +986,56 @@
         const kaiFont = await pdfDoc.embedFont(fontBytesKai, { subset: true });
         const black = rgb(0, 0, 0);
 
+        const fold = opts.layout === "fold";
+        const uniqueChars = [...new Set(cards.map((c) => c.char))];
+
         // 相同字只擷取一次
         const charCache = new Map();
-        const uniqueChars = [...new Set(cards.map((c) => c.char))];
         for (let i = 0; i < uniqueChars.length; i++) {
           status.textContent = `擷取單字… ${i + 1}/${uniqueChars.length}`;
           const ch = uniqueChars[i];
           charCache.set(ch, await captureCharImage(ch, opts.showRadical, opts.radicalColor));
         }
 
-        const perPage = CARD_POS.length;
+        // 對折版：背面圖先轉 180° 再嵌入
+        const backImgCache = new Map();
+        if (fold) {
+          for (let i = 0; i < uniqueChars.length; i++) {
+            status.textContent = `處理背面圖… ${i + 1}/${uniqueChars.length}`;
+            const ch = uniqueChars[i];
+            const resolved = await resolveCharImage(ch);
+            if (!resolved) {
+              backImgCache.set(ch, null);
+              continue;
+            }
+            const src = resolved.img;
+            const c = document.createElement("canvas");
+            c.width = src.naturalWidth;
+            c.height = src.naturalHeight;
+            const ctx = c.getContext("2d");
+            ctx.translate(c.width / 2, c.height / 2);
+            ctx.rotate(Math.PI);
+            ctx.drawImage(src, -c.width / 2, -c.height / 2);
+            const dataUrl = c.toDataURL("image/jpeg", 0.88);
+            backImgCache.set(ch, {
+              bytes: dataUrlToUint8(dataUrl),
+              w: c.width,
+              h: c.height,
+              kind: "jpg",
+            });
+          }
+        }
+
+        const perPage = fold ? FOLD_CHAR_POS.length : CARD_POS.length;
         const pageCount = Math.ceil(cards.length / perPage);
-        // 預覽字級 135pt ≈ 47.625mm；圖依 em 盒比例置中於字卡
         const charBoxMm = (CHAR_SIZE_PT * 25.4) / 72;
 
-        for (let p = 0; p < pageCount; p++) {
-          status.textContent = `產生 PDF 中… ${p + 1}/${pageCount}`;
-          const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
-          drawCropMarksPdf(page, black);
-
-          const slice = cards.slice(p * perPage, (p + 1) * perPage);
-          for (let i = 0; i < slice.length; i++) {
-            const card = slice[i];
-            const [cx, cy] = CARD_POS[i];
-            const midX = cx + 85 / 2;
-            const midY = cy + 50 / 2;
-
-            const captured = charCache.get(card.char);
-            const png = await pdfDoc.embedPng(dataUrlToUint8(captured.dataUrl));
+        function drawCharOnPdfPage(page, card, cx, cy) {
+          const midX = cx + 85 / 2;
+          const midY = cy + 50 / 2;
+          const captured = charCache.get(card.char);
+          return pdfDoc.embedPng(dataUrlToUint8(captured.dataUrl)).then((png) => {
             const aspect = captured.widthPx / Math.max(1, captured.heightPx);
-            // 擷取時有 0.35em 內距；整體再縮小 3cm，避免上下超出字卡
             const padFactor = 1.7;
             let drawH = charBoxMm * padFactor - 30;
             let drawW = drawH * aspect;
@@ -894,7 +1049,6 @@
               width: mmX(drawW),
               height: mmX(drawH),
             });
-
             if (opts.showLesson && card.lesson) {
               const lx = mmX(cx + 70);
               const ly = mmYFromTop(cy + 40) - LESSON_SIZE_PT * 0.8;
@@ -905,6 +1059,43 @@
                 font: kaiFont,
                 color: black,
               });
+            }
+          });
+        }
+
+        async function drawBackImageOnPdfPage(page, card, cx, cy) {
+          const midX = cx + 85 / 2;
+          const midY = cy + 50 / 2;
+          const cached = backImgCache.get(card.char);
+          if (!cached) return;
+          const embedded = cached.kind === "jpg"
+            ? await pdfDoc.embedJpg(cached.bytes)
+            : await pdfDoc.embedPng(cached.bytes);
+          const fit = fitImageMm(cached.w, cached.h, IMG_MAX_W_MM, IMG_MAX_H_MM);
+          page.drawImage(embedded, {
+            x: mmX(midX - fit.w / 2),
+            y: mmYFromTop(midY + fit.h / 2),
+            width: mmX(fit.w),
+            height: mmX(fit.h),
+          });
+        }
+
+        for (let p = 0; p < pageCount; p++) {
+          status.textContent = `產生 PDF 中… ${p + 1}/${pageCount}`;
+          const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+          drawCropMarksPdf(page, black);
+
+          const slice = cards.slice(p * perPage, (p + 1) * perPage);
+          for (let i = 0; i < slice.length; i++) {
+            const card = slice[i];
+            if (fold) {
+              const [cx, cy] = FOLD_CHAR_POS[i];
+              await drawCharOnPdfPage(page, card, cx, cy);
+              const [ix, iy] = FOLD_IMG_POS[i];
+              await drawBackImageOnPdfPage(page, card, ix, iy);
+            } else {
+              const [cx, cy] = CARD_POS[i];
+              await drawCharOnPdfPage(page, card, cx, cy);
             }
           }
         }
@@ -917,6 +1108,7 @@
         a.download =
           "字卡_" +
           (opts.script === "simp" ? "簡體" : "繁體") +
+          (fold ? "_對折" : "") +
           "_" +
           new Date().toISOString().slice(0, 10) +
           ".pdf";
@@ -927,7 +1119,7 @@
 
         const kb = Math.max(1, Math.round(pdfBytes.length / 1024));
         status.textContent = `已下載 PDF（${pageCount} 頁，約 ${kb} KB）`;
-        renderPreview();
+        await renderPreview();
       } catch (e) {
         console.error(e);
         status.textContent = "下載失敗：" + (e.message || String(e));
