@@ -385,13 +385,91 @@
       color: #335;
       font-size: 0.85rem;
     }
+    .night-toggle {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #888;
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      font-size: 0.95rem;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    .night-toggle:hover { background: #eee; }
+    /* 夜覽：黑底，減少藍光（字卡維持淺底以利識字） */
+    body.night-mode {
+      background-color: #0d0d0d !important;
+      color: #ddd;
+    }
+    body.night-mode .night-toggle {
+      background: rgba(40, 40, 40, 0.9);
+      color: #ddd;
+      border-color: #666;
+    }
+    body.night-mode .night-toggle:hover { background: #333; }
+    body.night-mode .top-bar select {
+      background: #1a1a1a;
+      color: #fff;
+      border: 1px solid #444;
+    }
+    body.night-mode .btn-custom {
+      background-color: #3949ab;
+    }
+    body.night-mode .source-tag {
+      background: #1a1a2e;
+      color: #90caf9;
+    }
+    body.night-mode .controls .sentence-index {
+      color: #aaa;
+    }
+    body.night-mode .end-indicator,
+    body.night-mode .sentence-index {
+      color: #aaa;
+    }
+    body.night-mode .char {
+      background: #2a2a2a;
+      box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+    }
+    body.night-mode .char.has-stroke {
+      background: #3d3a28;
+    }
+    body.night-mode .char.has-img {
+      background: #3a3228;
+    }
+    body.night-mode .char.no-stroke {
+      background: #333;
+      color: #ccc;
+    }
+    body.night-mode .char-base {
+      color: #f5f5f5;
+    }
+    body.night-mode .custom-sheet-panel {
+      background: #1a1a1a;
+      color: #ddd;
+      border-color: #444;
+    }
+    body.night-mode .custom-sheet-panel a {
+      color: #90caf9;
+    }
+    body.night-mode .custom-sheet-format {
+      background: #222;
+      border-color: #444;
+    }
+    body.night-mode .custom-sheet-row textarea,
+    body.night-mode .custom-sheet-row input,
+    body.night-mode .custom-sheet-result input {
+      background: #111;
+      color: #eee;
+      border-color: #555;
+    }
   </style>
 </head>
-<body>
+<body class="night-mode">
   <div class="top-bar">
     <select id="sheet-select" onchange="onPresetSheetChange()"></select>
     <select id="lesson-select" onchange="changeLesson()"></select>
     <button type="button" class="btn-custom" id="btnCustomSheet">自製課文內容試算表</button>
+    <button type="button" class="night-toggle" id="nightToggle" title="夜覽／日間（黑底減少藍光）">日間</button>
   </div>
   <div class="source-tag" id="sourceTag" hidden></div>
 
@@ -1932,6 +2010,29 @@ function playAudio() {
     initCustomSheetPanel();
     loadYoutubeMap();
     rebuildSheetSelect(DEFAULT_SHEET.id, DEFAULT_SHEET.gid);
+
+    (function initNightMode() {
+      const key = "reading_night";
+      const btn = document.getElementById("nightToggle");
+      // 預設夜晚；僅當使用者曾選日間（存成 0）才關閉
+      const active = localStorage.getItem(key) !== "0";
+      document.body.classList.toggle("night-mode", active);
+      function updateLabel() {
+        const on = document.body.classList.contains("night-mode");
+        if (btn) btn.textContent = on ? "日間" : "夜覽";
+      }
+      updateLabel();
+      if (btn) {
+        btn.addEventListener("click", () => {
+          document.body.classList.toggle("night-mode");
+          localStorage.setItem(
+            key,
+            document.body.classList.contains("night-mode") ? "1" : "0"
+          );
+          updateLabel();
+        });
+      }
+    })();
 
     (function boot() {
       const params = getQueryParams();
