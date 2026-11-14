@@ -157,7 +157,7 @@
     /* 無 JPEG 時用注音字型（同聽音辨字 BpmfZihiOnly），上下顛倒便於對折 */
     .card-zhuyin-fallback {
       font-family: 'BpmfZihiOnly', 'Microsoft JhengHei', sans-serif;
-      font-size: 36pt;
+      font-size: 108pt; /* 原 36pt × 3 */
       line-height: 1.15;
       color: #000;
       transform: rotate(180deg);
@@ -783,7 +783,7 @@
       document.body.appendChild(holder);
       try {
         if (document.fonts && document.fonts.ready) await document.fonts.ready;
-        await document.fonts.load("36pt BpmfZihiOnly");
+        await document.fonts.load("108pt BpmfZihiOnly");
         const canvas = await html2canvas(box, {
           backgroundColor: "#ffffff",
           scale: 2,
