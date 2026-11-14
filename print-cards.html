@@ -160,7 +160,8 @@
       font-size: 108pt; /* 原 36pt × 3 */
       line-height: 1.15;
       color: #000;
-      transform: rotate(180deg);
+      /* 先上移再旋轉 180° → 畫面上往下 0.5cm */
+      transform: rotate(180deg) translateY(-0.5cm);
       max-width: 70mm;
       max-height: 40mm;
       text-align: center;
@@ -253,10 +254,10 @@
       color: #c62828;
       pointer-events: none;
     }
-    /* 課次：相對字卡右下角（x+70mm、y+40mm） */
+    /* 課次：相對字卡右下角（x+65mm、y+40mm；由 70 往左 0.5cm） */
     .card-lesson {
       position: absolute;
-      left: 70mm;
+      left: 65mm;
       top: 40mm;
       font-size: 8pt;
       line-height: 1;
@@ -1115,7 +1116,7 @@
               height: mmX(drawH),
             });
             if (opts.showLesson && card.lesson) {
-              const lx = mmX(cx + 70);
+              const lx = mmX(cx + 65);
               const ly = mmYFromTop(cy + 40) - LESSON_SIZE_PT * 0.8;
               page.drawText(card.lesson, {
                 x: lx,
