@@ -15,6 +15,11 @@
       src: url('fonts/ToneOZ-RadicalZ-KaiTraditional.ttf') format('truetype');
       font-display: block;
     }
+    @font-face {
+      font-family: 'BpmfZihiOnly';
+      src: url('fonts/BpmfZihiOnly-R.ttf') format('truetype');
+      font-display: block;
+    }
 
     * { box-sizing: border-box; }
     body {
@@ -148,6 +153,17 @@
       font-size: 10pt;
       color: #999;
       transform: rotate(180deg);
+    }
+    /* 無 JPEG 時用注音字型（同聽音辨字 BpmfZihiOnly），上下顛倒便於對折 */
+    .card-zhuyin-fallback {
+      font-family: 'BpmfZihiOnly', 'Microsoft JhengHei', sans-serif;
+      font-size: 36pt;
+      line-height: 1.15;
+      color: #000;
+      transform: rotate(180deg);
+      max-width: 70mm;
+      max-height: 40mm;
+      text-align: center;
     }
     table.data th.col-check,
     table.data td.col-check {
@@ -572,7 +588,11 @@
       body.querySelectorAll(".row-check").forEach((box) => {
         box.addEventListener("change", () => {
           const tr = box.closest("tr");
-          if (tr) tr.classList.toggle("row-selected", box.checked);
+          if (tr) {
+            tr.classList.toggle("row-selected", box.checked);
+            // 勾選列 → 該列 B／E 所有字預設全選
+            if (box.checked) setRowCharsSelected(tr, true);
+          }
           updateSelectStatus();
         });
       });
@@ -590,6 +610,7 @@
           if (!box) return;
           box.checked = !box.checked;
           tr.classList.toggle("row-selected", box.checked);
+          if (box.checked) setRowCharsSelected(tr, true);
           updateSelectStatus();
         });
       });
@@ -638,11 +659,15 @@
 
     function charImageUrls(ch) {
       const base = getBaseChar(ch);
-      return [
-        `${base}1.JPEG`,
-        `${base}1.jpeg`,
-        `Character/${encodeURIComponent(base)}.png`,
-      ];
+      // 只有筆順／圖檔 JPEG；沒有圖時改用注音字型，不抓同名 png
+      return [`${base}1.JPEG`, `${base}1.jpeg`];
+    }
+
+    function setRowCharsSelected(tr, on) {
+      if (!tr) return;
+      tr.querySelectorAll(".char-pick").forEach((btn) => {
+        btn.classList.toggle("on", !!on);
+      });
     }
 
     function loadHtmlImage(url) {
@@ -732,13 +757,46 @@
         img.alt = card.char;
         inner.appendChild(img);
       } else {
-        const miss = document.createElement("span");
-        miss.className = "card-image-missing";
-        miss.textContent = "無圖：" + card.char;
-        inner.appendChild(miss);
+        // 無 JPEG：改放注音字型（BpmfZihiOnly，同聽音辨字）
+        const zh = document.createElement("span");
+        zh.className = "card-zhuyin-fallback";
+        zh.textContent = card.char;
+        inner.appendChild(zh);
       }
       el.appendChild(inner);
       return el;
+    }
+
+    /** 無圖時擷取注音字型（已旋轉 180°）供 PDF 嵌入 */
+    async function captureZhuyinBackImage(ch) {
+      const holder = document.createElement("div");
+      holder.style.cssText =
+        "position:fixed;left:-10000px;top:0;background:#fff;pointer-events:none;";
+      const box = document.createElement("div");
+      box.style.cssText =
+        "display:flex;align-items:center;justify-content:center;width:70mm;height:40mm;background:#fff;";
+      const zh = document.createElement("span");
+      zh.className = "card-zhuyin-fallback";
+      zh.textContent = ch;
+      box.appendChild(zh);
+      holder.appendChild(box);
+      document.body.appendChild(holder);
+      try {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        await document.fonts.load("36pt BpmfZihiOnly");
+        const canvas = await html2canvas(box, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          logging: false,
+        });
+        return {
+          dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+          widthPx: canvas.width,
+          heightPx: canvas.height,
+        };
+      } finally {
+        holder.remove();
+      }
     }
 
     function updatePreviewLabel(opts) {
@@ -1004,25 +1062,32 @@
             status.textContent = `處理背面圖… ${i + 1}/${uniqueChars.length}`;
             const ch = uniqueChars[i];
             const resolved = await resolveCharImage(ch);
-            if (!resolved) {
-              backImgCache.set(ch, null);
-              continue;
+            if (resolved) {
+              const src = resolved.img;
+              const c = document.createElement("canvas");
+              c.width = src.naturalWidth;
+              c.height = src.naturalHeight;
+              const ctx = c.getContext("2d");
+              ctx.translate(c.width / 2, c.height / 2);
+              ctx.rotate(Math.PI);
+              ctx.drawImage(src, -c.width / 2, -c.height / 2);
+              const dataUrl = c.toDataURL("image/jpeg", 0.88);
+              backImgCache.set(ch, {
+                bytes: dataUrlToUint8(dataUrl),
+                w: c.width,
+                h: c.height,
+                kind: "jpg",
+              });
+            } else {
+              // 無 JPEG：注音字型（擷取時已旋轉）
+              const cap = await captureZhuyinBackImage(ch);
+              backImgCache.set(ch, {
+                bytes: dataUrlToUint8(cap.dataUrl),
+                w: cap.widthPx,
+                h: cap.heightPx,
+                kind: "jpg",
+              });
             }
-            const src = resolved.img;
-            const c = document.createElement("canvas");
-            c.width = src.naturalWidth;
-            c.height = src.naturalHeight;
-            const ctx = c.getContext("2d");
-            ctx.translate(c.width / 2, c.height / 2);
-            ctx.rotate(Math.PI);
-            ctx.drawImage(src, -c.width / 2, -c.height / 2);
-            const dataUrl = c.toDataURL("image/jpeg", 0.88);
-            backImgCache.set(ch, {
-              bytes: dataUrlToUint8(dataUrl),
-              w: c.width,
-              h: c.height,
-              kind: "jpg",
-            });
           }
         }
 
